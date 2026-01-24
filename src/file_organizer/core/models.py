@@ -1,4 +1,4 @@
-from pydantic import BaseModel, BeforeValidator, ValidationError
+from pydantic import BaseModel, BeforeValidator, ValidationError, Field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Annotated
@@ -59,3 +59,18 @@ class PendingOperation(BaseModel):
     operation_mode: OperationMode  
     created_at: datetime
     
+
+class FolderObject(BaseModel):
+    folder_path: Path
+    description: Optional[str]
+
+class FoldersToClassify(BaseModel):
+    folders: list[FolderObject]
+    default_folder: Path
+
+
+
+class LLMClassificationResponse(BaseModel):
+    folder_name: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: Optional[str]
