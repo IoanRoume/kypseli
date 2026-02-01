@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from core.models import FileInfo, ExtractedContent
+from file_organizer.core.models import FileInfo, ExtractedContent
 
 class BaseExtractor(ABC):
     supported_extensions: list[str] = []

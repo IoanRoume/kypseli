@@ -1,5 +1,6 @@
-from extractors.base import BaseExtractor
-from core.models import FileInfo, ExtractedContent
+from file_organizer.extractors.base import BaseExtractor
+from file_organizer.core.models import FileInfo, ExtractedContent
+
 import pandas as pd
 
 

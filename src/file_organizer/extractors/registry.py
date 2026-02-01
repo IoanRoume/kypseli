@@ -1,12 +1,12 @@
-from extractors.base import BaseExtractor
-from core.models import FileInfo
+from file_organizer.extractors.base import BaseExtractor
+from file_organizer.core.models import FileInfo
 
 class ExtractorRegistry:
     def __init__(self):
         self._extractors: list[BaseExtractor] = []
 
     def register(self, extractor: BaseExtractor):
-        if extractor not in self.extractors:
+        if extractor not in self._extractors:
             self._extractors.append(extractor)
             return "Extractor was successfully Added"
         else:

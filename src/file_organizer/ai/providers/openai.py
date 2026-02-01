@@ -1,5 +1,5 @@
-from ai.base import BaseAIProvider
-from core.models import LLMClassificationResponse
+from file_organizer.ai.base import BaseAIProvider
+from file_organizer.core.models import LLMClassificationResponse
 import os
 from langchain_openai import ChatOpenAI
 

@@ -1,4 +1,4 @@
-from core.models import ExtractedContent, FoldersToClassify
+from file_organizer.core.models import ExtractedContent, FoldersToClassify
 
 SYSTEM_PROMPT = """You are a file organization assistant. Your task is to classify files into the most appropriate folder based on the file's metadata and content.
 

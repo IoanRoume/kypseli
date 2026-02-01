@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from core.models import ExtractedContent, FoldersToClassify, ClassificationResult
-from prompts.classification import build_classification_prompt, SYSTEM_PROMPT
+from file_organizer.core.models import ExtractedContent, FoldersToClassify, ClassificationResult
+from file_organizer.prompts.classification import build_classification_prompt, SYSTEM_PROMPT
 import json
+
+
 class BaseAIProvider(ABC):
     name: str
     llm = None
