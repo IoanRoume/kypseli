@@ -24,6 +24,9 @@ from file_organizer.extractors.video_extractor import VideoExtractor
 from file_organizer.extractors.archive_extractor import ArchiveExtractor
 from file_organizer.extractors.binary_extractor import BinaryExtractor
 from file_organizer.ai.providers.openai import OpenaiProvider
+from file_organizer.ai.providers.deepinfra import DeepInfraProvider
+from file_organizer.ai.providers.gemini import GeminiProvider
+from file_organizer.ai.providers.anthropic import AnthropicProvider
 from file_organizer.storage.database import get_session, init_database
 from file_organizer.storage.repository import ConfigurationRepository, HistoryRepository
 from file_organizer.service.watcher import (
@@ -112,6 +115,18 @@ def setup_ai_provider(provider_name: str, model: Optional[str] = None):
     if provider_name.lower() == "openai":
         provider = OpenaiProvider()
         provider.initialize_model(model=model or "gpt-4o-mini")
+        return provider
+    elif provider_name.lower() == "anthropic":
+        provider = AnthropicProvider()
+        provider.initialize_model(model=model or "claude-sonnet-4-20250514")
+        return provider
+    elif provider_name.lower() == "gemini":
+        provider = GeminiProvider()
+        provider.initialize_model(model=model or "gemini-2.0-flash")
+        return provider
+    elif provider_name.lower() == "deepinfra":
+        provider = DeepInfraProvider()
+        provider.initialize_model(model=model or "google/gemma-3-27b-it")
         return provider
     else:
         console.print(f"[red]Unknown provider: {provider_name}[/red]")
@@ -964,20 +979,40 @@ def providers():
     table.add_column("Default Model")
     
     import os
+    
+    # OpenAI
     openai_key = os.environ.get("OPENAI_API_KEY")
     openai_status = "[green]Configured[/green]" if openai_key else "[red]Not configured[/red]"
     table.add_row("openai", openai_status, "gpt-4o-mini")
+    
+    # Anthropic
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    anthropic_status = "[green]Configured[/green]" if anthropic_key else "[red]Not configured[/red]"
+    table.add_row("anthropic", anthropic_status, "claude-sonnet-4-20250514")
+    
+    # Gemini
+    gemini_key = os.environ.get("GOOGLE_API_KEY")
+    gemini_status = "[green]Configured[/green]" if gemini_key else "[red]Not configured[/red]"
+    table.add_row("gemini", gemini_status, "gemini-2.0-flash")
+    
+    # DeepInfra
+    deepinfra_key = os.environ.get("DEEPINFRA_API_TOKEN")
+    deepinfra_status = "[green]Configured[/green]" if deepinfra_key else "[red]Not configured[/red]"
+    table.add_row("deepinfra", deepinfra_status, "google/gemma-3-27b-it")
     
     console.print(table)
     
     console.print("\n[dim]Set API keys as environment variables:[/dim]")
     console.print("  export OPENAI_API_KEY=your-key-here")
+    console.print("  export ANTHROPIC_API_KEY=your-key-here")
+    console.print("  export GOOGLE_API_KEY=your-key-here")
+    console.print("  export DEEPINFRA_API_TOKEN=your-key-here")
 
 
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]File Organizer[/bold] v0.1.0")
+    console.print("[bold]File Organizer[/bold] v0.3.0")
 
 
 if __name__ == "__main__":

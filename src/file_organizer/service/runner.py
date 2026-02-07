@@ -25,6 +25,21 @@ def setup_ai_provider(provider_name: str, model_name: str = None):
         provider = OpenaiProvider()
         provider.initialize_model(model=model_name or "gpt-4o-mini")
         return provider
+    elif provider_name.lower() == "deepinfra":
+        from file_organizer.ai.providers.deepinfra import DeepInfraProvider
+        provider = DeepInfraProvider()
+        provider.initialize_model(model=model_name or "google/gemma-3-27b-it")
+        return provider
+    elif provider_name.lower() == "anthropic":
+        from file_organizer.ai.providers.anthropic import AnthropicProvider
+        provider = AnthropicProvider()
+        provider.initialize_model(model=model_name or "claude-sonnet-4-20250514")
+        return provider
+    elif provider_name.lower() == "gemini":
+        from file_organizer.ai.providers.gemini import GeminiProvider
+        provider = GeminiProvider()
+        provider.initialize_model(model=model_name or "gemini-2.0-flash")
+        return provider
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
 
