@@ -16,7 +16,13 @@ from file_organizer.core.models import (
     PendingStatus
 )
 from file_organizer.extractors.registry import ExtractorRegistry
-from file_organizer.extractors.csv_extractor import CSVExtractor
+from file_organizer.extractors.tabular_extractor import TabularExtractor
+from file_organizer.extractors.text_extractor import TextExtractor
+from file_organizer.extractors.document_extractor import DocumentExtractor
+from file_organizer.extractors.image_extractor import ImageExtractor
+from file_organizer.extractors.video_extractor import VideoExtractor
+from file_organizer.extractors.archive_extractor import ArchiveExtractor
+from file_organizer.extractors.binary_extractor import BinaryExtractor
 from file_organizer.ai.providers.openai import OpenaiProvider
 from file_organizer.storage.database import get_session, init_database
 from file_organizer.storage.repository import ConfigurationRepository, HistoryRepository
@@ -61,7 +67,7 @@ def create_default_folders(base_path: Path) -> FoldersToClassify:
         folders=[
             FolderObject(
                 folder_path=base_path / "Datasets",
-                description="Data files like CSV, Excel, Parquet, and other tabular data"
+                description="Data files like CSV, Excel, Parquet, Pickles and other tabular data"
             ),
             FolderObject(
                 folder_path=base_path / "Documents",
@@ -91,7 +97,13 @@ def create_default_folders(base_path: Path) -> FoldersToClassify:
 def setup_extractor_registry() -> ExtractorRegistry:
     """Create and configure the extractor registry."""
     registry = ExtractorRegistry()
-    registry.register(CSVExtractor())
+    registry.register(TabularExtractor())
+    registry.register(TextExtractor())
+    registry.register(DocumentExtractor())
+    registry.register(ImageExtractor())
+    registry.register(VideoExtractor())
+    registry.register(ArchiveExtractor())
+    registry.register(BinaryExtractor())
     return registry
 
 

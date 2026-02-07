@@ -22,7 +22,13 @@ from file_organizer.core.models import (
     FileInfo
 )
 from file_organizer.extractors.registry import ExtractorRegistry
-from file_organizer.extractors.csv_extractor import CSVExtractor
+from file_organizer.extractors.tabular_extractor import TabularExtractor
+from file_organizer.extractors.text_extractor import TextExtractor
+from file_organizer.extractors.document_extractor import DocumentExtractor
+from file_organizer.extractors.image_extractor import ImageExtractor
+from file_organizer.extractors.video_extractor import VideoExtractor
+from file_organizer.extractors.archive_extractor import ArchiveExtractor
+from file_organizer.extractors.binary_extractor import BinaryExtractor
 from file_organizer.ai.base import BaseAIProvider
 
 
@@ -341,7 +347,13 @@ class FileWatcherService:
     def _setup_registry(self) -> ExtractorRegistry:
         """Setup extractor registry."""
         registry = ExtractorRegistry()
-        registry.register(CSVExtractor())
+        registry.register(TabularExtractor())
+        registry.register(TextExtractor())
+        registry.register(DocumentExtractor())
+        registry.register(ImageExtractor())
+        registry.register(VideoExtractor())
+        registry.register(ArchiveExtractor())
+        registry.register(BinaryExtractor())
         return registry
     
     def _signal_handler(self, signum, frame):

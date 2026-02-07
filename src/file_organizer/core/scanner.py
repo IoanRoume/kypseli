@@ -5,28 +5,95 @@ from file_organizer.core.models import FileInfo, ContentType
 class DirectoryScanner:
 
     EXTENSION_MAP = {
-            # Tabular
-            '.csv': ContentType.TABULAR,
-            '.xlsx': ContentType.TABULAR,
-            '.parquet': ContentType.TABULAR,
-            '.pkl': ContentType.TABULAR,
-            '.xz': ContentType.TABULAR,
-            # Text
-            '.txt': ContentType.TEXT,
-            '.md': ContentType.TEXT,
-            '.py': ContentType.TEXT,
-            '.js': ContentType.TEXT,
-            # Document
-            '.pdf': ContentType.DOCUMENT,
-            '.docx': ContentType.DOCUMENT,
-            # Image
-            '.png': ContentType.IMAGE,
-            '.jpg': ContentType.IMAGE,
-            '.jpeg': ContentType.IMAGE,
-            # Video
-            '.mp4': ContentType.VIDEO,
-            '.mov': ContentType.VIDEO,
-        }
+        # --- Tabular (Data & Spreadsheets) ---
+        '.csv': ContentType.TABULAR,
+        '.tsv': ContentType.TABULAR,
+        '.xlsx': ContentType.TABULAR,
+        '.xls': ContentType.TABULAR,
+        '.ods': ContentType.TABULAR,
+        '.parquet': ContentType.TABULAR,
+        '.feather': ContentType.TABULAR,
+        '.pkl': ContentType.TABULAR,
+        '.orc': ContentType.TABULAR,
+        '.dta': ContentType.TABULAR, 
+        '.sas7bdat': ContentType.TABULAR, 
+        '.h5': ContentType.TABULAR,  
+        '.xz': ContentType.TABULAR, 
+
+        # --- Text (Code, Config, Web) ---
+        '.txt': ContentType.TEXT,
+        '.md': ContentType.TEXT,
+        '.py': ContentType.TEXT,
+        '.js': ContentType.TEXT,
+        '.html': ContentType.TEXT,
+        '.css': ContentType.TEXT,
+        '.json': ContentType.TEXT,
+        '.xml': ContentType.TEXT,
+        '.yaml': ContentType.TEXT,
+        '.yml': ContentType.TEXT,
+        '.ini': ContentType.TEXT,
+        '.log': ContentType.TEXT,
+        '.sql': ContentType.TEXT,
+        '.sh': ContentType.TEXT,
+        '.bat': ContentType.TEXT,
+        '.c': ContentType.TEXT,
+        '.cpp': ContentType.TEXT,
+        '.java': ContentType.TEXT,
+        '.go': ContentType.TEXT,
+        '.rs': ContentType.TEXT,
+
+        # --- Document (Office, E-books) ---
+        '.pdf': ContentType.DOCUMENT,
+        '.docx': ContentType.DOCUMENT,
+        '.doc': ContentType.DOCUMENT,
+        '.rtf': ContentType.DOCUMENT,
+        '.odt': ContentType.DOCUMENT,
+        '.ppt': ContentType.DOCUMENT,
+        '.pptx': ContentType.DOCUMENT,
+        '.odp': ContentType.DOCUMENT,
+        '.epub': ContentType.DOCUMENT,
+
+        # --- Image ---
+        '.png': ContentType.IMAGE,
+        '.jpg': ContentType.IMAGE,
+        '.jpeg': ContentType.IMAGE,
+        '.gif': ContentType.IMAGE,
+        '.bmp': ContentType.IMAGE,
+        '.tiff': ContentType.IMAGE,
+        '.tif': ContentType.IMAGE,
+        '.webp': ContentType.IMAGE,
+        '.svg': ContentType.IMAGE,
+        '.ico': ContentType.IMAGE,
+        '.heic': ContentType.IMAGE,
+
+        # --- Video ---
+        '.mp4': ContentType.VIDEO,
+        '.mov': ContentType.VIDEO,
+        '.avi': ContentType.VIDEO,
+        '.mkv': ContentType.VIDEO,
+        '.wmv': ContentType.VIDEO,
+        '.flv': ContentType.VIDEO,
+        '.webm': ContentType.VIDEO,
+        '.m4v': ContentType.VIDEO,
+        
+        # --- Archive (Compressed files) ---
+        '.zip': ContentType.ARCHIVE,
+        '.tar': ContentType.ARCHIVE,
+        '.gz': ContentType.ARCHIVE,
+        '.bz2': ContentType.ARCHIVE,
+        '.rar': ContentType.ARCHIVE,
+        '.7z': ContentType.ARCHIVE,
+
+        # --- Binary (Executables & Raw Data) ---
+        '.bin': ContentType.BINARY,
+        '.dat': ContentType.BINARY,
+        '.db': ContentType.BINARY,
+        '.sqlite': ContentType.BINARY,
+        '.exe': ContentType.BINARY,
+        '.dll': ContentType.BINARY,
+        '.so': ContentType.BINARY,
+        '.class': ContentType.BINARY,
+    }
     
 
     def get_content_type(self, extension: str) -> ContentType:
