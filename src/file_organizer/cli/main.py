@@ -4,6 +4,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+import time
 
 from file_organizer.core.scanner import DirectoryScanner
 from file_organizer.core.orchestrator import FileOrganizer
@@ -19,6 +20,18 @@ from file_organizer.extractors.csv_extractor import CSVExtractor
 from file_organizer.ai.providers.openai import OpenaiProvider
 from file_organizer.storage.database import get_session, init_database
 from file_organizer.storage.repository import ConfigurationRepository, HistoryRepository
+from file_organizer.service.watcher import (
+    FileWatcherService,
+    start_background_service,
+    stop_service,
+    get_service_status,
+    is_service_running,
+    get_log_file
+)
+
+import subprocess
+
+
 
 app = typer.Typer(
     name="file-organizer",
@@ -158,6 +171,335 @@ def create_folders_interactive(base_path: Path) -> FoldersToClassify:
         default_folder=default_folder
     )
 
+# ============== SERVICE COMMANDS ==============
+
+service_app = typer.Typer(help="Manage the background file watcher service")
+app.add_typer(service_app, name="service")
+
+
+@service_app.command("start")
+def service_start(
+    directory: Path = typer.Argument(
+        ...,
+        help="Directory to watch for new files",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True
+    ),
+    config_name: Optional[str] = typer.Option(
+        None,
+        "--config", "-c",
+        help="Use a saved configuration by name"
+    ),
+    use_defaults: bool = typer.Option(
+        False,
+        "--defaults", "-d",
+        help="Use default folder configuration"
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Base directory for organized folders"
+    ),
+    provider: str = typer.Option(
+        "openai",
+        "--provider", "-p",
+        help="AI provider to use"
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Model to use"
+    ),
+    cooldown: int = typer.Option(
+        5,
+        "--cooldown",
+        help="Seconds to wait before processing a new file"
+    ),
+    process_existing: bool = typer.Option(
+        False,
+        "--process-existing", "-e",
+        help="Process existing files before starting watch"
+    ),
+    save_config: Optional[str] = typer.Option(
+        None,
+        "--save-config",
+        help="Save the configuration with this name"
+    ),
+):
+    """
+    Start the background file watcher service.
+    
+    Examples:
+        file-organizer service start ./Downloads --config my_setup
+        file-organizer service start ./Downloads --defaults
+        file-organizer service start ./Downloads --defaults --process-existing
+    """
+    
+    # Check if already running
+    running, pid = is_service_running()
+    if running:
+        console.print(f"[yellow]Service is already running (PID: {pid})[/yellow]")
+        console.print("Use [bold]file-organizer service stop[/bold] to stop it first.")
+        raise typer.Exit(1)
+    
+    output_base = output or Path("./organized")
+    
+    # Get folder configuration
+    session = get_session()
+    config_repo = ConfigurationRepository(session)
+    
+    used_config_name = None
+    
+    if config_name:
+        folders_config = config_repo.get_folders_config(config_name)
+        if not folders_config:
+            console.print(f"[red]Configuration '{config_name}' not found.[/red]")
+            session.close()
+            raise typer.Exit(1)
+        console.print(f"[green]Using saved configuration: {config_name}[/green]")
+        used_config_name = config_name
+    elif use_defaults:
+        folders_config = create_default_folders(output_base)
+        console.print("[dim]Using default folder configuration[/dim]")
+    else:
+        folders_config = create_folders_interactive(output_base)
+    
+    if save_config:
+        description = typer.prompt("Configuration description (optional)", default="", show_default=False)
+        config_repo.save(save_config, folders_config, description if description else None)
+        console.print(f"[green]Configuration saved as '{save_config}'[/green]")
+        used_config_name = save_config
+    
+    session.close()
+    
+    # Process existing files if requested (before backgrounding)
+    if process_existing:
+        console.print("[bold]Processing existing files...[/bold]")
+        
+        # Setup AI provider for processing existing files
+        ai_provider = setup_ai_provider(provider, model)
+        
+        service = FileWatcherService(
+            watch_directory=directory,
+            folders_config=folders_config,
+            ai_provider=ai_provider,
+            cooldown_seconds=cooldown,
+            configuration_name=used_config_name
+        )
+        
+        results = service.process_existing()
+        console.print(
+            f"[dim]Processed: {results['successful']} successful, "
+            f"{results['failed']} failed, {results['skipped']} skipped[/dim]"
+        )
+    
+    # Start in background
+    console.print("\n[bold]Starting background service...[/bold]")
+    
+    success, pid = start_background_service(
+        watch_directory=directory,
+        folders_config=folders_config,
+        provider_name=provider,
+        model_name=model,
+        configuration_name=used_config_name,
+        cooldown_seconds=cooldown
+    )
+    
+    if success:
+        console.print(Panel(
+            f"[green]Service started successfully![/green]\n\n"
+            f"[bold]PID:[/bold] {pid}\n"
+            f"[bold]Watching:[/bold] {directory}\n"
+            f"[bold]Log file:[/bold] {get_log_file()}\n\n"
+            f"[dim]Use 'file-organizer service status' to check status[/dim]\n"
+            f"[dim]Use 'file-organizer service stop' to stop the service[/dim]\n"
+            f"[dim]Use 'file-organizer service logs' to view logs[/dim]",
+            title="Service Started"
+        ))
+    else:
+        console.print("[red]Failed to start service. Check logs for details.[/red]")
+        console.print(f"Log file: {get_log_file()}")
+        raise typer.Exit(1)
+
+
+@service_app.command("stop")
+def service_stop():
+    """Stop the background file watcher service."""
+    
+    running, pid = is_service_running()
+    
+    if not running:
+        console.print("[yellow]Service is not running.[/yellow]")
+        raise typer.Exit(0)
+    
+    console.print(f"[bold]Stopping service (PID: {pid})...[/bold]")
+    
+    if stop_service():
+        console.print("[green]Service stopped successfully.[/green]")
+    else:
+        console.print("[red]Failed to stop service.[/red]")
+        raise typer.Exit(1)
+
+
+@service_app.command("status")
+def service_status():
+    """Show the status of the background service."""
+    
+    status = get_service_status()
+    
+    if status["running"]:
+        status_text = f"[green]Running[/green] (PID: {status['pid']})"
+    else:
+        status_text = "[red]Stopped[/red]"
+    
+    config = status.get("config") or {}
+    
+    info_lines = [
+        f"[bold]Status:[/bold] {status_text}",
+        f"[bold]Platform:[/bold] {status.get('platform', 'Unknown')}",
+        f"[bold]Log file:[/bold] {status['log_file']}"
+    ]
+    
+    if config:
+        info_lines.extend([
+            "",
+            f"[bold]Watching:[/bold] {config.get('watch_directory', 'N/A')}",
+            f"[bold]Provider:[/bold] {config.get('provider_name', 'N/A')}",
+            f"[bold]Model:[/bold] {config.get('model_name') or 'default'}",
+            f"[bold]Config:[/bold] {config.get('configuration_name') or 'default'}",
+            f"[bold]Cooldown:[/bold] {config.get('cooldown_seconds', 5)}s",
+            f"[bold]Started:[/bold] {config.get('started_at', 'N/A')}"
+        ])
+    
+    console.print(Panel(
+        "\n".join(info_lines),
+        title="Service Status"
+    ))
+
+
+@service_app.command("logs")
+def service_logs(
+    lines: int = typer.Option(
+        50,
+        "--lines", "-n",
+        help="Number of lines to show"
+    ),
+    follow: bool = typer.Option(
+        False,
+        "--follow", "-f",
+        help="Follow log output (like tail -f)"
+    )
+):
+    """View the service logs."""
+    import platform as plat
+    
+    log_file = get_log_file()
+    
+    if not log_file.exists():
+        console.print("[yellow]No log file found. Service may not have been started yet.[/yellow]")
+        raise typer.Exit(0)
+    
+    if follow:
+        console.print(f"[dim]Following {log_file} (Ctrl+C to stop)...[/dim]\n")
+        
+        if plat.system() == "Windows":
+            # Windows: use PowerShell Get-Content -Wait
+            try:
+                subprocess.run(
+                    ["powershell", "-Command", f"Get-Content -Path '{log_file}' -Wait -Tail {lines}"],
+                )
+            except KeyboardInterrupt:
+                pass
+            except FileNotFoundError:
+                # Fallback: manual tail -f implementation
+                console.print("[dim]PowerShell not available, using fallback...[/dim]")
+                try:
+                    with open(log_file, 'r') as f:
+                        # Go to end of file
+                        f.seek(0, 2)
+                        while True:
+                            line = f.readline()
+                            if line:
+                                console.print(line.rstrip())
+                            else:
+                                time.sleep(0.5)
+                except KeyboardInterrupt:
+                    pass
+        else:
+            # Unix: use tail -f
+            try:
+                subprocess.run(["tail", "-f", "-n", str(lines), str(log_file)])
+            except KeyboardInterrupt:
+                pass
+    else:
+        try:
+            with open(log_file, 'r') as f:
+                all_lines = f.readlines()
+                display_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+                
+                console.print(f"[dim]Showing last {len(display_lines)} lines from {log_file}[/dim]\n")
+                
+                for line in display_lines:
+                    if "| ERROR" in line:
+                        console.print(f"[red]{line.rstrip()}[/red]")
+                    elif "| WARNING" in line:
+                        console.print(f"[yellow]{line.rstrip()}[/yellow]")
+                    elif "SUCCESS:" in line:
+                        console.print(f"[green]{line.rstrip()}[/green]")
+                    else:
+                        console.print(line.rstrip())
+        except IOError as e:
+            console.print(f"[red]Error reading log file: {e}[/red]")
+
+
+@service_app.command("restart")
+def service_restart():
+    """Restart the background service with the same configuration."""
+    
+    status = get_service_status()
+    config = status.get("config")
+    
+    if not config:
+        console.print("[red]No previous configuration found. Use 'service start' instead.[/red]")
+        raise typer.Exit(1)
+    
+    # Stop if running
+    if status["running"]:
+        console.print("[bold]Stopping current service...[/bold]")
+        stop_service()
+        time.sleep(1)
+    
+    # Rebuild configuration
+    folders_config = FoldersToClassify(
+        folders=[
+            FolderObject(
+                folder_path=Path(f["folder_path"]),
+                description=f["description"]
+            )
+            for f in config["folders"]
+        ],
+        default_folder=Path(config["default_folder"])
+    )
+    
+    # Start service
+    console.print("[bold]Starting service...[/bold]")
+    
+    success, pid = start_background_service(
+        watch_directory=Path(config["watch_directory"]),
+        folders_config=folders_config,
+        provider_name=config["provider_name"],
+        model_name=config.get("model_name"),
+        configuration_name=config.get("configuration_name"),
+        cooldown_seconds=config.get("cooldown_seconds", 5)
+    )
+    
+    if success:
+        console.print(f"[green]Service restarted successfully (PID: {pid})[/green]")
+    else:
+        console.print("[red]Failed to restart service.[/red]")
+        raise typer.Exit(1)
 
 # ============== MAIN COMMANDS ==============
 
