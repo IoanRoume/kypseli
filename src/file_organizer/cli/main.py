@@ -17,12 +17,18 @@ from file_organizer.core.models import (
 from file_organizer.extractors.registry import ExtractorRegistry
 from file_organizer.extractors.csv_extractor import CSVExtractor
 from file_organizer.ai.providers.openai import OpenaiProvider
+from file_organizer.storage.database import get_session, init_database
+from file_organizer.storage.repository import ConfigurationRepository, HistoryRepository
 
 app = typer.Typer(
     name="file-organizer",
     help="AI-powered file organization tool"
 )
 console = Console()
+
+
+# Initialize database on import
+init_database()
 
 
 def get_operation_mode(mode: str) -> OperationMode:
@@ -33,7 +39,7 @@ def get_operation_mode(mode: str) -> OperationMode:
         "dry_run": OperationMode.DRY_RUN,
         "dry-run": OperationMode.DRY_RUN,
     }
-    return mode_map.get(mode.lower(), OperationMode.DRY_RUN)
+    return mode_map.get(mode.lower(), OperationMode.MOVE)
 
 
 def create_default_folders(base_path: Path) -> FoldersToClassify:
@@ -64,10 +70,6 @@ def create_default_folders(base_path: Path) -> FoldersToClassify:
                 folder_path=base_path / "Archives",
                 description="Compressed files like ZIP, TAR, RAR"
             ),
-            FolderObject(
-                folder_path=base_path / "Keys",
-                description="Access keys for several providers"
-            ),
         ],
         default_folder=base_path / "Other"
     )
@@ -77,8 +79,6 @@ def setup_extractor_registry() -> ExtractorRegistry:
     """Create and configure the extractor registry."""
     registry = ExtractorRegistry()
     registry.register(CSVExtractor())
-    # registry.register(PDFExtractor())
-    # registry.register(TextExtractor())
     return registry
 
 
@@ -92,6 +92,74 @@ def setup_ai_provider(provider_name: str, model: Optional[str] = None):
         console.print(f"[red]Unknown provider: {provider_name}[/red]")
         raise typer.Exit(1)
 
+
+def create_folders_interactive(base_path: Path) -> FoldersToClassify:
+    """Interactive folder creation wizard."""
+    
+    console.print("\n[bold blue]Folder Setup Wizard[/bold blue]\n")
+    console.print("Create folders where your files will be organized.")
+    console.print("Type [bold]'done'[/bold] when finished adding folders.\n")
+    
+    folders = []
+    
+    while True:
+        folder_name = typer.prompt(
+            "Folder name (or 'done' to finish)",
+            default="done" if folders else ""
+        )
+        
+        if folder_name.lower() == "done":
+            if not folders:
+                console.print("[yellow]You need at least one folder![/yellow]")
+                continue
+            break
+        
+        description = typer.prompt(
+            f"Description for '{folder_name}' (optional, press Enter to skip)",
+            default="",
+            show_default=False
+        )
+        
+        folder_path = base_path / folder_name
+        
+        folders.append(FolderObject(
+            folder_path=folder_path,
+            description=description if description else None
+        ))
+        
+        console.print(f"[green]Added: {folder_name}[/green]\n")
+    
+    console.print("\n[bold]Default folder for files that don't match any category:[/bold]")
+    default_name = typer.prompt("Default folder name", default="Other")
+    default_folder = base_path / default_name
+    
+    # Show summary
+    console.print("\n[bold]Your folder configuration:[/bold]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Folder", style="cyan")
+    table.add_column("Description", style="green")
+    
+    for folder in folders:
+        table.add_row(
+            folder.folder_path.name,
+            folder.description or "[dim]No description[/dim]"
+        )
+    table.add_row(f"{default_name} (default)", "[dim]Unmatched files[/dim]")
+    
+    console.print(table)
+    
+    if not typer.confirm("\nUse this configuration?"):
+        console.print("[yellow]Let's start over...[/yellow]")
+        return create_folders_interactive(base_path)
+    
+    return FoldersToClassify(
+        folders=folders,
+        default_folder=default_folder
+    )
+
+
+# ============== MAIN COMMANDS ==============
 
 @app.command()
 def organize(
@@ -128,18 +196,64 @@ def organize(
         "--yes", "-y",
         help="Execute operations without confirmation"
     ),
+    use_defaults: bool = typer.Option(
+        False,
+        "--defaults", "-d",
+        help="Use default folder configuration instead of interactive setup"
+    ),
+    config_name: Optional[str] = typer.Option(
+        None,
+        "--config", "-c",
+        help="Use a saved configuration by name"
+    ),
+    save_config: Optional[str] = typer.Option(
+        None,
+        "--save-config",
+        help="Save the configuration with this name after setup"
+    ),
 ):
     """
     Organize files in a directory using AI classification.
     
     Examples:
         file-organizer organize ./Downloads
-        file-organizer organize ./Downloads --mode copy
-        file-organizer organize ./Downloads --mode move --yes
+        file-organizer organize ./Downloads --defaults
+        file-organizer organize ./Downloads --config my_setup
+        file-organizer organize ./Downloads --save-config work_config
     """
     
-    # Setup output directory
     output_base = output or Path("./organized")
+    
+    # Get folder configuration
+    session = get_session()
+    config_repo = ConfigurationRepository(session)
+    
+    used_config_name = None
+    
+    if config_name:
+        # Load saved configuration
+        folders_config = config_repo.get_folders_config(config_name)
+        if not folders_config:
+            console.print(f"[red]Configuration '{config_name}' not found.[/red]")
+            console.print("Use [bold]file-organizer config list[/bold] to see available configurations.")
+            session.close()
+            raise typer.Exit(1)
+        console.print(f"[green]Using saved configuration: {config_name}[/green]\n")
+        used_config_name = config_name
+    elif use_defaults:
+        folders_config = create_default_folders(output_base)
+        console.print("[dim]Using default folder configuration[/dim]\n")
+    else:
+        folders_config = create_folders_interactive(output_base)
+    
+    # Save configuration if requested
+    if save_config:
+        description = typer.prompt("Configuration description (optional)", default="", show_default=False)
+        config_repo.save(save_config, folders_config, description if description else None)
+        console.print(f"[green]Configuration saved as '{save_config}'[/green]\n")
+        used_config_name = save_config
+    
+    session.close()
     
     console.print(Panel(
         f"[bold blue]File Organizer[/bold blue]\n\n"
@@ -155,7 +269,6 @@ def organize(
         scanner = DirectoryScanner()
         registry = setup_extractor_registry()
         ai_provider = setup_ai_provider(provider, model)
-        folders_config = create_default_folders(output_base)
         operation_mode = get_operation_mode(mode)
         
         organizer = FileOrganizer(
@@ -202,7 +315,6 @@ def organize(
         console.print("Run with [bold]--mode move[/bold] or [bold]--mode copy[/bold] to execute.")
         return
     
-    # Confirm execution
     if not auto_execute:
         confirm = typer.confirm(f"\nProceed with {mode} operation?")
         if not confirm:
@@ -211,8 +323,8 @@ def organize(
     
     # Execute operations
     console.print(f"\n[bold]Executing {mode} operations...[/bold]")
-    executor = OperationExecutor()
-    results = executor.execute_batch(operations)
+    executor = OperationExecutor(configuration_name=used_config_name)
+    results = executor.execute_batch(operations, log_to_database=True)
     
     # Show summary
     console.print(Panel(
@@ -237,9 +349,6 @@ def scan(
 ):
     """
     Scan a directory and show file information without organizing.
-    
-    Examples:
-        file-organizer scan ./Downloads
     """
     
     scanner = DirectoryScanner()
@@ -259,7 +368,6 @@ def scan(
     table.add_column("Modified", style="yellow")
     
     for file in files:
-        # Format size
         if file.size < 1024:
             size_str = f"{file.size} B"
         elif file.size < 1024 * 1024:
@@ -277,7 +385,6 @@ def scan(
     
     console.print(table)
     
-    # Summary by type
     console.print("\n[bold]Summary by type:[/bold]")
     type_counts = {}
     for file in files:
@@ -286,6 +393,209 @@ def scan(
     
     for type_name, count in sorted(type_counts.items()):
         console.print(f"  {type_name}: {count}")
+
+
+# ============== CONFIGURATION COMMANDS ==============
+
+config_app = typer.Typer(help="Manage saved configurations")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("list")
+def config_list():
+    """List all saved configurations."""
+    
+    session = get_session()
+    config_repo = ConfigurationRepository(session)
+    configs = config_repo.list_all()
+    session.close()
+    
+    if not configs:
+        console.print("[yellow]No saved configurations found.[/yellow]")
+        console.print("Create one with: [bold]file-organizer organize ./folder --save-config my_config[/bold]")
+        return
+    
+    console.print(f"\n[bold]Saved Configurations ({len(configs)}):[/bold]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="green")
+    table.add_column("Created", style="yellow")
+    table.add_column("Updated", style="yellow")
+    
+    for config in configs:
+        table.add_row(
+            config.name,
+            config.description or "[dim]No description[/dim]",
+            config.created_at.strftime("%Y-%m-%d %H:%M") if config.created_at else "N/A",
+            config.updated_at.strftime("%Y-%m-%d %H:%M") if config.updated_at else "N/A"
+        )
+    
+    console.print(table)
+
+
+@config_app.command("show")
+def config_show(
+    name: str = typer.Argument(..., help="Configuration name to show")
+):
+    """Show details of a saved configuration."""
+    
+    session = get_session()
+    config_repo = ConfigurationRepository(session)
+    
+    config = config_repo.get_by_name(name)
+    if not config:
+        console.print(f"[red]Configuration '{name}' not found.[/red]")
+        session.close()
+        raise typer.Exit(1)
+    
+    folders_config = config_repo.get_folders_config(name)
+    session.close()
+    
+    console.print(f"\n[bold blue]Configuration: {name}[/bold blue]\n")
+    
+    if config.description:
+        console.print(f"Description: {config.description}\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Folder", style="cyan")
+    table.add_column("Path", style="blue")
+    table.add_column("Description", style="green")
+    
+    for folder in folders_config.folders:
+        table.add_row(
+            folder.folder_path.name,
+            str(folder.folder_path),
+            folder.description or "[dim]No description[/dim]"
+        )
+    
+    table.add_row(
+        f"{folders_config.default_folder.name} (default)",
+        str(folders_config.default_folder),
+        "[dim]Unmatched files[/dim]"
+    )
+    
+    console.print(table)
+
+
+@config_app.command("delete")
+def config_delete(
+    name: str = typer.Argument(..., help="Configuration name to delete")
+):
+    """Delete a saved configuration."""
+    
+    if not typer.confirm(f"Delete configuration '{name}'?"):
+        console.print("[yellow]Cancelled.[/yellow]")
+        raise typer.Exit(0)
+    
+    session = get_session()
+    config_repo = ConfigurationRepository(session)
+    
+    if config_repo.delete(name):
+        console.print(f"[green]Configuration '{name}' deleted.[/green]")
+    else:
+        console.print(f"[red]Configuration '{name}' not found.[/red]")
+    
+    session.close()
+
+
+# ============== HISTORY COMMANDS ==============
+
+history_app = typer.Typer(help="View operation history")
+app.add_typer(history_app, name="history")
+
+
+@history_app.command("list")
+def history_list(
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of records to show")
+):
+    """Show recent operation history."""
+    
+    session = get_session()
+    history_repo = HistoryRepository(session)
+    records = history_repo.get_recent(limit=limit)
+    session.close()
+    
+    if not records:
+        console.print("[yellow]No operation history found.[/yellow]")
+        return
+    
+    console.print(f"\n[bold]Recent Operations (last {len(records)}):[/bold]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("File", style="cyan")
+    table.add_column("Category", style="green")
+    table.add_column("Mode", style="blue")
+    table.add_column("Status")
+    table.add_column("Date", style="yellow")
+    
+    for record in records:
+        status_style = {
+            "success": "[green]success[/green]",
+            "failed": "[red]failed[/red]",
+            "skipped": "[yellow]skipped[/yellow]"
+        }.get(record.status, record.status)
+        
+        table.add_row(
+            record.file_name[:30] + "..." if len(record.file_name) > 30 else record.file_name,
+            record.category or "N/A",
+            record.operation_mode,
+            status_style,
+            record.executed_at.strftime("%Y-%m-%d %H:%M") if record.executed_at else "N/A"
+        )
+    
+    console.print(table)
+
+
+@history_app.command("search")
+def history_search(
+    query: str = typer.Argument(..., help="Filename to search for")
+):
+    """Search for a file in operation history."""
+    
+    session = get_session()
+    history_repo = HistoryRepository(session)
+    records = history_repo.search_by_filename(query)
+    session.close()
+    
+    if not records:
+        console.print(f"[yellow]No records found matching '{query}'[/yellow]")
+        return
+    
+    console.print(f"\n[bold]Found {len(records)} matches for '{query}':[/bold]\n")
+    
+    for record in records:
+        status_color = {"success": "green", "failed": "red", "skipped": "yellow"}.get(record.status, "white")
+        
+        console.print(Panel(
+            f"[bold]File:[/bold] {record.file_name}\n"
+            f"[bold]Source:[/bold] {record.source_path}\n"
+            f"[bold]Destination:[/bold] {record.destination_path}\n"
+            f"[bold]Category:[/bold] {record.category or 'N/A'}\n"
+            f"[bold]Confidence:[/bold] {record.confidence:.0%}" if record.confidence else "N/A" + "\n"
+            f"[bold]Mode:[/bold] {record.operation_mode}\n"
+            f"[bold]Status:[/bold] [{status_color}]{record.status}[/{status_color}]\n"
+            f"[bold]Date:[/bold] {record.executed_at.strftime('%Y-%m-%d %H:%M:%S') if record.executed_at else 'N/A'}",
+            title=record.file_name
+        ))
+
+
+@history_app.command("stats")
+def history_stats():
+    """Show operation statistics."""
+    
+    session = get_session()
+    history_repo = HistoryRepository(session)
+    stats = history_repo.get_stats()
+    session.close()
+    
+    console.print(Panel(
+        f"[bold]Total Operations:[/bold] {stats['total']}\n\n"
+        f"[green]Successful:[/green] {stats['successful']}\n"
+        f"[red]Failed:[/red] {stats['failed']}\n"
+        f"[yellow]Skipped:[/yellow] {stats['skipped']}",
+        title="Operation Statistics"
+    ))
 
 
 @app.command()
@@ -299,21 +609,15 @@ def providers():
     table.add_column("Status", style="green")
     table.add_column("Default Model")
     
-    # Check OpenAI
     import os
     openai_key = os.environ.get("OPENAI_API_KEY")
-    openai_status = "[green]Configured[/green]" if openai_key else "[red]Not configured[/red] OPENAI_API_KEY is required"
+    openai_status = "[green]Configured[/green]" if openai_key else "[red]Not configured[/red]"
     table.add_row("openai", openai_status, "gpt-4o-mini")
-    
-    # anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    # anthropic_status = "[green]Configured[/green]" if anthropic_key else "[red]Not configured[/red]"
-    # table.add_row("anthropic", anthropic_status, "claude-sonnet-4-20250514")
     
     console.print(table)
     
     console.print("\n[dim]Set API keys as environment variables:[/dim]")
     console.print("  export OPENAI_API_KEY=your-key-here")
-    # console.print("  export ANTHROPIC_API_KEY=your-key-here")
 
 
 @app.command()
