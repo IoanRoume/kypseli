@@ -47,6 +47,7 @@ from file_organizer.analyzers.registry import AnalyzerRegistry
 from file_organizer.analyzers.tabular_analyzer import TabularAnalyzer
 from file_organizer.analyzers.text_analyzer import TextAnalyzer
 from file_organizer.analyzers.document_analyzer import DocumentAnalyzer
+from file_organizer.storage.repository import AnalysisRepository
 
 
 
@@ -589,6 +590,11 @@ def organize(
         "--save-config",
         help="Save the configuration with this name after setup"
     ),
+    analyze: bool = typer.Option(
+        False,
+        "--analyze", "-a",
+        help="Analyze files"
+    ),
 ):
     """
     Organize files in a directory using AI classification.
@@ -632,13 +638,15 @@ def organize(
         used_config_name = save_config
     
     session.close()
+    analysis_text = "active" if analyze else "inactive"
     
     console.print(Panel(
         f"[bold blue]File Organizer[/bold blue]\n\n"
         f"Directory: {directory}\n"
         f"Mode: {mode}\n"
         f"Provider: {provider}\n"
-        f"Output: {output_base}",
+        f"Output: {output_base}\n"
+        f"Analysis: {analysis_text}",
         title="Configuration"
     ))
     
@@ -690,6 +698,54 @@ def organize(
         )
     
     console.print(table)
+
+    if analyze:
+        file_infos = scanner.scan(directory=directory)
+        for file_info in file_infos:
+            registry = AnalyzerRegistry()
+            registry.register(TabularAnalyzer())
+            registry.register(TextAnalyzer())
+            registry.register(DocumentAnalyzer())
+
+            analyzer = registry.get_analyzer(file_info)
+    
+            if not analyzer:
+                console.print(f"[yellow]Skipping {file_info.path.name}: No analyzer available for {file_info.content_type.value} files[/yellow]")
+                continue
+            
+            # Setup AI provider (optional)
+            ai_provider = None
+            try:
+                ai_provider = setup_ai_provider(provider, model)
+            except:
+                console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
+                raise typer.Exit(1)
+
+            
+            # Run analysis
+            console.print(f"\n[bold]Analyzing {file_info.path.name}...[/bold]\n")
+            
+            with console.status("[bold green]Running analysis..."):
+                result = analyzer.analyze(file_info, ai_provider)
+            
+            # Display results
+            if result.error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                raise typer.Exit(1)
+            
+            # Display based on analysis type
+            if result.tabular:
+                display_tabular_analysis(result)
+            elif result.document:
+                display_document_analysis(result)
+            elif result.code:
+                display_text_analysis(result)
+            
+            session = get_session()
+            repo = AnalysisRepository(session)
+            repo.save(result)
+            session.close()
+            console.print("\n[dim]Analysis saved to database[/dim]")
     
     # Handle execution
     if operation_mode == OperationMode.DRY_RUN:
@@ -881,7 +937,7 @@ def config_delete(
     session.close()
 
 
-# Add analyze command group
+# ============== ANALYSIS COMMANDS ==============
 analyze_app = typer.Typer(help="Analyze files and get insights")
 app.add_typer(analyze_app, name="analyze")
 
@@ -945,7 +1001,9 @@ def analyze_file(
     try:
         ai_provider = setup_ai_provider(provider, model)
     except:
-        console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
+        console.print("[red]AI provider not available, skipping AI descriptions[/red]")
+        raise typer.Exit(1)
+        
     
     # Run analysis
     console.print(f"\n[bold]Analyzing {file_path.name}...[/bold]\n")
@@ -969,7 +1027,6 @@ def analyze_file(
     # Save to database
     if save:
         session = get_session()
-        from file_organizer.storage.repository import AnalysisRepository
         repo = AnalysisRepository(session)
         repo.save(result)
         session.close()
@@ -1092,10 +1149,59 @@ def analyze_directory(
         "--provider", "-p",
         help="AI provider"
     ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Model to use"
+    ),
 ):
     """Analyze all files in a directory."""
-    # Implementation similar to above but loops through files
-    pass
+    scanner = DirectoryScanner()
+    file_infos = scanner.scan(directory=directory)
+    for file_info in file_infos:
+        registry = AnalyzerRegistry()
+        registry.register(TabularAnalyzer())
+        registry.register(TextAnalyzer())
+        registry.register(DocumentAnalyzer())
+
+        analyzer = registry.get_analyzer(file_info)
+
+        if not analyzer:
+            console.print(f"[yellow]Skipping {file_info.path.name}: No analyzer available for {file_info.content_type.value} files[/yellow]")
+            continue
+        
+        ai_provider = None
+        try:
+            ai_provider = setup_ai_provider(provider, model)
+        except:
+            console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
+            raise typer.Exit(1)
+
+        
+        # Run analysis
+        console.print(f"\n[bold]Analyzing {file_info.path.name}...[/bold]\n")
+        
+        with console.status("[bold green]Running analysis..."):
+            result = analyzer.analyze(file_info, ai_provider)
+        
+        # Display results
+        if result.error:
+            console.print(f"[red]Error: {result.error}[/red]")
+            raise typer.Exit(1)
+        
+        # Display based on analysis type
+        if result.tabular:
+            display_tabular_analysis(result)
+        elif result.document:
+            display_document_analysis(result)
+        elif result.code:
+            display_text_analysis(result)
+        
+        session = get_session()
+        repo = AnalysisRepository(session)
+        repo.save(result)
+        session.close()
+        console.print("\n[dim]Analysis saved to database[/dim]")
 
 
 @analyze_app.command("history")
@@ -1106,7 +1212,6 @@ def analyze_history(
     """Show recent analysis history."""
     
     session = get_session()
-    from file_organizer.storage.repository import AnalysisRepository
     repo = AnalysisRepository(session)
     records = repo.get_recent(limit)
     session.close()

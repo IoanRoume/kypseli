@@ -127,15 +127,11 @@ TEXT PREVIEW:
 ```text
 {text_preview[:2500]}
 ...
-Provide:
+Please provide your analysis using exactly this format:
 
-A concise summary of the document's content (1-2 sentences)
+SUMMARY: A concise summary of the content (1-2 sentences).
+KEY POINTS: A comma-separated list of the main themes or findings.
+LANGUAGE: The Language that the document is written.
 
-The main themes or key points discussed
-
-The intended audience or purpose of the document
-
-Any notable entities (people, organizations, dates) mentioned
-
-Keep response under 150 words."""
+Keep the total response under 150 words."""
     return prompt

@@ -88,7 +88,7 @@ class DocumentAnalyzer(BaseAnalyzer):
                 analysis_type="document",
                 analyzed_at=datetime.now(),
                 document=doc_analysis, 
-                ai_description=ai_description
+                ai_description=ai_result.get('summary', ai_description)
             )
             
         except Exception as e:
@@ -225,26 +225,44 @@ class DocumentAnalyzer(BaseAnalyzer):
             response = ai_provider.base_llm.invoke(messages)
             content = response.content if hasattr(response, 'content') else str(response)
             
+
+            summary_match = re.search(
+                r'(?:^|\n)(?:1\.\s*)?(?:\*\*)?SUMMARY(?:\*\*)?[:\.]?\s*(.*?)(?=\n(?:2\.\s*)?(?:\*\*)?KEY POINTS|\n(?:3\.\s*)?(?:\*\*)?AUDIENCE|$)', 
+                content, 
+                re.DOTALL | re.IGNORECASE
+            )
+            summary = summary_match.group(1).strip() if summary_match else content[:300]
             
-            summary_match = re.search(r'1\.\s*(.*?)(?=\n\d\.|\n\n|$)', content, re.DOTALL)
-            summary = summary_match.group(1).strip() if summary_match else content[:200]
-            
-            topics = current_data.key_topics # Fallback to heuristic
-            topics_match = re.search(r'2\.\s*(.*?)(?=\n\d\.|\n\n|$)', content, re.DOTALL)
+            topics = current_data.key_topics 
+            topics_match = re.search(
+                r'(?:^|\n)(?:2\.\s*)?(?:\*\*)?KEY POINTS(?:\*\*)?[:\.]?\s*(.*?)(?=\n(?:3\.\s*)?(?:\*\*)?LANGUAGE|\n(?:4\.\s*)?(?:\*\*)?ENTITIES|$)', 
+                content, 
+                re.DOTALL | re.IGNORECASE
+            )
             
             if topics_match:
                 raw_topics = topics_match.group(1)
-                extracted = [t.strip().strip('-•') for t in re.split(r'[,;\n]', raw_topics) if t.strip()]
+                extracted = [
+                    t.strip().strip('-•').strip() 
+                    for t in re.split(r'[,;\n]', raw_topics) 
+                    if t.strip()
+                ]
                 if extracted:
-                    topics = extracted[:5]
+                    topics = extracted[:8]
+
+            language_match = re.search(
+                r'(?:^|\n)(?:3\.\s*)?(?:\*\*)?LANGUAGE(?:\*\*)?[:\.]?\s*(.*)', 
+                content, 
+                re.DOTALL | re.IGNORECASE
+            )
+            language = language_match.group(1).strip() if language_match else current_data.language
 
             return {
                 'description': content,  
                 'summary': summary,      
-                'key_topics': topics,    
-                'language': current_data.language 
+                'key_topics': topics,   
+                'language': language
             }
             
-        except Exception:
-            # Log exception if needed
+        except Exception as e:
             return None
