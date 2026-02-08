@@ -665,14 +665,18 @@ def organize(
     table.add_column("File", style="cyan")
     table.add_column("Category", style="green")
     table.add_column("Confidence", justify="right")
+    table.add_column("Explanation", style="yellow")
     table.add_column("Destination", style="blue")
+
     
     for op in operations:
         confidence_str = f"{op.classification.confidence:.0%}" if op.classification.confidence else "N/A"
+        explanation_str = op.classification.reasoning[:50] + "..."
         table.add_row(
             op.file_info.name,
             op.classification.category or "Unknown",
             confidence_str,
+            explanation_str,
             str(op.classification.classified_path.name)
         )
     
@@ -876,7 +880,8 @@ app.add_typer(history_app, name="history")
 
 @history_app.command("list")
 def history_list(
-    limit: int = typer.Option(20, "--limit", "-n", help="Number of records to show")
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of records to show"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full explanations")
 ):
     """Show recent operation history."""
     
@@ -891,29 +896,74 @@ def history_list(
     
     console.print(f"\n[bold]Recent Operations (last {len(records)}):[/bold]\n")
     
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("File", style="cyan")
-    table.add_column("Category", style="green")
-    table.add_column("Mode", style="blue")
-    table.add_column("Status")
-    table.add_column("Date", style="yellow")
+    if verbose:
+        # Detailed view with full reasoning
+        for i, record in enumerate(records, 1):
+            status_color = {
+                "success": "green",
+                "failed": "red", 
+                "skipped": "yellow"
+            }.get(record.status, "white")
+            
+            confidence_str = f"{record.confidence:.0%}" if record.confidence else "N/A"
+            date_str = record.executed_at.strftime("%Y-%m-%d %H:%M:%S") if record.executed_at else "N/A"
+            
+            panel_content = (
+                f"[bold]File:[/bold] {record.file_name}\n"
+                f"[bold]Source:[/bold] {record.source_path}\n"
+                f"[bold]Destination:[/bold] {record.destination_path}\n"
+                f"\n"
+                f"[bold]Category:[/bold] {record.category or 'N/A'}\n"
+                f"[bold]Confidence:[/bold] {confidence_str}\n"
+                f"[bold]Mode:[/bold] {record.operation_mode}\n"
+                f"[bold]Status:[/bold] [{status_color}]{record.status}[/{status_color}]\n"
+                f"[bold]Date:[/bold] {date_str}\n"
+                f"\n"
+                f"[bold]Reasoning:[/bold]\n"
+                f"[italic]{record.reasoning or 'No reasoning provided'}[/italic]"
+            )
+            
+            console.print(Panel(
+                panel_content,
+                title=f"[bold cyan]#{i} — {record.file_name}[/bold cyan]",
+                border_style="dim"
+            ))
+            
+            if i < len(records):
+                console.print("")  # Spacing between panels
     
-    for record in records:
-        status_style = {
-            "success": "[green]success[/green]",
-            "failed": "[red]failed[/red]",
-            "skipped": "[yellow]skipped[/yellow]"
-        }.get(record.status, record.status)
+    else:
+        # Compact table view
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("#", style="dim", width=4)
+        table.add_column("File", style="cyan")
+        table.add_column("Category", style="green")
+        table.add_column("Confidence", justify="right")
+        table.add_column("Status")
+        table.add_column("Date", style="dim")
         
-        table.add_row(
-            record.file_name[:30] + "..." if len(record.file_name) > 30 else record.file_name,
-            record.category or "N/A",
-            record.operation_mode,
-            status_style,
-            record.executed_at.strftime("%Y-%m-%d %H:%M") if record.executed_at else "N/A"
-        )
-    
-    console.print(table)
+        for i, record in enumerate(records, 1):
+            status_style = {
+                "success": "[green]success[/green]",
+                "failed": "[red]failed[/red]",
+                "skipped": "[yellow]skipped[/yellow]"
+            }.get(record.status, record.status)
+            
+            filename = record.file_name[:35] + "..." if len(record.file_name) > 35 else record.file_name
+            confidence_str = f"{record.confidence:.0%}" if record.confidence else "N/A"
+            date_str = record.executed_at.strftime("%m-%d %H:%M") if record.executed_at else "N/A"
+            
+            table.add_row(
+                str(i),
+                filename,
+                record.category or "N/A",
+                confidence_str,
+                status_style,
+                date_str
+            )
+        
+        console.print(table)
+        console.print("\n[dim]Tip: Use --verbose or -v to see full details and reasoning[/dim]")
 
 
 @history_app.command("search")
