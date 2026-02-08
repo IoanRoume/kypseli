@@ -14,6 +14,10 @@ from file_organizer.core.models import (
     OperationMode
 )
 
+import json
+from file_organizer.storage.models import FileAnalysis
+from file_organizer.core.models import AnalysisResult
+
 
 class ConfigurationRepository:
     """Repository for managing saved configurations."""
@@ -213,3 +217,42 @@ class HistoryRepository:
             "failed": failed,
             "skipped": skipped
         }
+    
+
+class AnalysisRepository:
+    """Repository for managing file analysis history."""
+    
+    def __init__(self, session):
+        self.session = session
+    
+    def save(self, analysis: AnalysisResult) -> FileAnalysis:
+        """Save an analysis result."""
+        
+        # Convert analysis to JSON
+        analysis_dict = analysis.model_dump(exclude={'file_info'})
+        
+        record = FileAnalysis(
+            file_name=analysis.file_info.name,
+            file_path=str(analysis.file_info.path),
+            file_size=analysis.file_info.size,
+            file_extension=analysis.file_info.extension,
+            analysis_type=analysis.analysis_type,
+            analysis_json=json.dumps(analysis_dict, default=str),
+            ai_description=analysis.ai_description
+        )
+        
+        self.session.add(record)
+        self.session.commit()
+        return record
+    
+    def get_by_filename(self, filename: str) -> list[FileAnalysis]:
+        """Get analyses by filename."""
+        return self.session.query(FileAnalysis).filter(
+            FileAnalysis.file_name.ilike(f"%{filename}%")
+        ).order_by(FileAnalysis.analyzed_at.desc()).all()
+    
+    def get_recent(self, limit: int = 20) -> list[FileAnalysis]:
+        """Get recent analyses."""
+        return self.session.query(FileAnalysis).order_by(
+            FileAnalysis.analyzed_at.desc()
+        ).limit(limit).all()

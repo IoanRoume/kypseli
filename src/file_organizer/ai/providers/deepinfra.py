@@ -13,9 +13,10 @@ from langchain_community.chat_models import ChatDeepInfra
 class DeepInfraProvider(BaseAIProvider):
     name: str = "deepinfra"
     llm = None
+    base_llm = None
     
     def initialize_model(self, model: str = "google/gemma-3-27b-it"):
-        self.llm = ChatDeepInfra(
+        self.base_llm = ChatDeepInfra(
             model=model,
             temperature=0,
             max_tokens=1024
@@ -39,7 +40,7 @@ class DeepInfraProvider(BaseAIProvider):
             ("user", user_prompt),
         ]
         
-        response = self.llm.invoke(messages)
+        response = self.base_llm.invoke(messages)
         
         try:
             content = response.content.strip()

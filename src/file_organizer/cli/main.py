@@ -13,7 +13,9 @@ from file_organizer.core.models import (
     FoldersToClassify,
     FolderObject,
     OperationMode,
-    PendingStatus
+    PendingStatus,
+    AnalysisResult,
+    FileInfo
 )
 from file_organizer.extractors.registry import ExtractorRegistry
 from file_organizer.extractors.tabular_extractor import TabularExtractor
@@ -37,8 +39,15 @@ from file_organizer.service.watcher import (
     is_service_running,
     get_log_file
 )
-
+from datetime import datetime
 import subprocess
+
+from file_organizer.core.scanner import DirectoryScanner
+from file_organizer.analyzers.registry import AnalyzerRegistry
+from file_organizer.analyzers.tabular_analyzer import TabularAnalyzer
+from file_organizer.analyzers.text_analyzer import TextAnalyzer
+from file_organizer.analyzers.document_analyzer import DocumentAnalyzer
+
 
 
 
@@ -871,6 +880,541 @@ def config_delete(
     
     session.close()
 
+
+# Add analyze command group
+analyze_app = typer.Typer(help="Analyze files and get insights")
+app.add_typer(analyze_app, name="analyze")
+
+
+@analyze_app.command("file")
+def analyze_file(
+    file_path: Path = typer.Argument(
+        ...,
+        help="File to analyze",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True
+    ),
+    provider: str = typer.Option(
+        "openai",
+        "--provider", "-p",
+        help="AI provider for descriptions"
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Model to use"
+    ),
+    save: bool = typer.Option(
+        True,
+        "--save/--no-save",
+        help="Save analysis to database"
+    ),
+):
+    """Analyze a single file and show insights."""
+
+    
+    # Create file info
+    scanner = DirectoryScanner()
+    stat_info = file_path.stat()
+    
+    file_info = FileInfo(
+        path=file_path,
+        name=file_path.name,
+        size=stat_info.st_size,
+        extension=file_path.suffix,
+        date_created=datetime.fromtimestamp(stat_info.st_ctime),
+        date_modified=datetime.fromtimestamp(stat_info.st_mtime),
+        content_type=scanner.get_content_type(file_path.suffix)
+    )
+    
+    registry = AnalyzerRegistry()
+    registry.register(TabularAnalyzer())
+    registry.register(TextAnalyzer())
+    registry.register(DocumentAnalyzer())
+    
+    analyzer = registry.get_analyzer(file_info)
+    
+    if not analyzer:
+        console.print(f"[yellow]No analyzer available for {file_info.content_type.value} files[/yellow]")
+        raise typer.Exit(1)
+    
+    # Setup AI provider (optional)
+    ai_provider = None
+    try:
+        ai_provider = setup_ai_provider(provider, model)
+    except:
+        console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
+    
+    # Run analysis
+    console.print(f"\n[bold]Analyzing {file_path.name}...[/bold]\n")
+    
+    with console.status("[bold green]Running analysis..."):
+        result = analyzer.analyze(file_info, ai_provider)
+    
+    # Display results
+    if result.error:
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise typer.Exit(1)
+    
+    # Display based on analysis type
+    if result.tabular:
+        display_tabular_analysis(result)
+    elif result.document:
+        display_document_analysis(result)
+    elif result.code:
+        display_text_analysis(result)
+    
+    # Save to database
+    if save:
+        session = get_session()
+        from file_organizer.storage.repository import AnalysisRepository
+        repo = AnalysisRepository(session)
+        repo.save(result)
+        session.close()
+        console.print("\n[dim]Analysis saved to database[/dim]")
+
+def display_text_analysis(result: AnalysisResult):
+    analysis = result.code
+
+    console.print(Panel(
+        f"[bold yellow]Language:[/bold yellow] {analysis.language}\n"  
+        f"[bold yellow]Line Count:[/bold yellow] {analysis.line_count:,}\n"
+        f"[bold yellow]Import Statements:[/bold yellow] {analysis.import_statements}\n"
+        f"[bold yellow]Functions:[/bold yellow] {analysis.functions}\n"
+        f"[bold yellow]Classes:[/bold yellow] {analysis.classes}\n"
+        f"[bold green]Complexity Estimate:[/bold green] {analysis.complexity_estimate}\n",
+        title=f"[bold cyan]{result.file_info.name}[/bold cyan]",
+        subtitle="Text Overview"
+    ))
+
+    if result.ai_description:
+        console.print(Panel(
+            result.ai_description,
+            title="[bold]AI Analysis[/bold]",
+            border_style="blue"
+        ))
+
+def display_document_analysis(result: AnalysisResult):
+    analysis = result.document
+
+    topics = ", ".join(analysis.key_topics) if analysis.key_topics else "None detected"
+    
+    # Format optional integers
+    pages = f"{analysis.page_count:,}" if analysis.page_count is not None else "N/A"
+
+    console.print(Panel(
+        f"[bold yellow]Language:[/bold yellow] {analysis.language}\n"
+        f"[bold yellow]Pages:[/bold yellow] {pages}\n"
+        f"[bold yellow]Word Count:[/bold yellow] {analysis.word_count:,}\n"
+        f"[bold yellow]Char Count:[/bold yellow] {analysis.char_count:,}\n"
+        f"[bold yellow]Key Topics:[/bold yellow] {topics}\n",
+        title=f"[bold cyan]{result.file_info.name}[/bold cyan]",
+        subtitle="Document Overview"
+    ))
+
+    if result.ai_description:
+        console.print(Panel(
+            result.ai_description,
+            title="[bold]AI Analysis[/bold]",
+            border_style="blue"
+        ))
+
+def display_tabular_analysis(result: AnalysisResult):
+    """Display tabular analysis results."""
+    
+    analysis = result.tabular
+    
+    # Overview panel
+    console.print(Panel(
+        f"[bold]Rows:[/bold] {analysis.row_count:,}\n"
+        f"[bold]Columns:[/bold] {analysis.column_count}\n"
+        f"[bold]Memory:[/bold] {analysis.memory_usage}",
+        title=f"[bold cyan]{result.file_info.name}[/bold cyan]",
+        subtitle="Dataset Overview"
+    ))
+    
+    # Columns table
+    console.print("\n[bold]Columns & Data Types:[/bold]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Column", style="cyan")
+    table.add_column("Type", style="green")
+    table.add_column("Missing", justify="right")
+    table.add_column("Missing %", justify="right")
+    
+    for col in analysis.columns[:30]:  # Limit display
+        missing = analysis.missing_values.get(col, 0)
+        missing_pct = analysis.missing_percentage.get(col, 0)
+        
+        # Color code missing values
+        if missing_pct > 50:
+            missing_style = "[red]"
+        elif missing_pct > 20:
+            missing_style = "[yellow]"
+        else:
+            missing_style = "[green]"
+        
+        table.add_row(
+            col[:40],
+            analysis.dtypes.get(col, "unknown"),
+            str(missing),
+            f"{missing_style}{missing_pct:.1f}%[/]"
+        )
+    
+    if len(analysis.columns) > 30:
+        table.add_row("...", "...", "...", "...")
+    
+    console.print(table)
+    
+    # AI Description
+    if result.ai_description:
+        console.print(Panel(
+            result.ai_description,
+            title="[bold]AI Analysis[/bold]",
+            border_style="blue"
+        ))
+
+
+@analyze_app.command("dir")
+def analyze_directory(
+    directory: Path = typer.Argument(
+        ...,
+        help="Directory to analyze",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True
+    ),
+    provider: str = typer.Option(
+        "openai",
+        "--provider", "-p",
+        help="AI provider"
+    ),
+):
+    """Analyze all files in a directory."""
+    # Implementation similar to above but loops through files
+    pass
+
+
+@analyze_app.command("history")
+def analyze_history(
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of records"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full analysis details")
+):
+    """Show recent analysis history."""
+    
+    session = get_session()
+    from file_organizer.storage.repository import AnalysisRepository
+    repo = AnalysisRepository(session)
+    records = repo.get_recent(limit)
+    session.close()
+    
+    if not records:
+        console.print("[yellow]No analysis history found.[/yellow]")
+        return
+    
+    console.print(f"\n[bold]Recent Analyses (last {len(records)}):[/bold]\n")
+    
+    if verbose:
+        # Detailed view with full analysis
+        for i, record in enumerate(records, 1):
+            display_analysis_record(i, record)
+            if i < len(records):
+                console.print("")  # Spacing between records
+    else:
+        # Compact table view
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("#", style="dim", width=4)
+        table.add_column("File", style="cyan")
+        table.add_column("Type", style="green")
+        table.add_column("Summary", style="yellow")
+        table.add_column("Date", style="dim")
+        
+        for i, record in enumerate(records, 1):
+            # Get brief summary based on analysis type
+            summary = get_analysis_summary(record)
+            
+            table.add_row(
+                str(i),
+                record.file_name[:35] + "..." if len(record.file_name) > 35 else record.file_name,
+                record.analysis_type,
+                summary[:50] + "..." if len(summary) > 50 else summary,
+                record.analyzed_at.strftime("%m-%d %H:%M") if record.analyzed_at else "N/A"
+            )
+        
+        console.print(table)
+        console.print("\n[dim]Tip: Use --verbose or -v to see full analysis details[/dim]")
+
+
+def get_analysis_summary(record) -> str:
+    """Get a brief summary from an analysis record."""
+    import json
+    
+    try:
+        analysis_data = json.loads(record.analysis_json)
+        
+        if record.analysis_type == "tabular":
+            tabular = analysis_data.get("tabular", {})
+            rows = tabular.get("row_count", "?")
+            cols = tabular.get("column_count", "?")
+            return f"{rows:,} rows × {cols} columns" if isinstance(rows, int) else f"{rows} rows × {cols} columns"
+        
+        elif record.analysis_type == "document":
+            document = analysis_data.get("document", {})
+            pages = document.get("page_count", "?")
+            words = document.get("word_count", "?")
+            return f"{pages} pages, {words} words"
+        
+        elif record.analysis_type == "code":
+            code = analysis_data.get("code", {})
+            lines = code.get("line_count", "?")
+            lang = code.get("language", "unknown")
+            return f"{lang}, {lines} lines"
+        
+        elif record.analysis_type == "image":
+            image = analysis_data.get("image", {})
+            width = image.get("width", "?")
+            height = image.get("height", "?")
+            return f"{width}×{height}"
+        
+        elif record.analysis_type == "archive":
+            archive = analysis_data.get("archive", {})
+            count = archive.get("file_count", "?")
+            return f"{count} files"
+        
+        else:
+            return "N/A"
+    
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return "N/A"
+
+
+def display_analysis_record(index: int, record):
+    """Display a full analysis record with all details."""
+    import json
+    
+    try:
+        analysis_data = json.loads(record.analysis_json)
+    except json.JSONDecodeError:
+        analysis_data = {}
+    
+    date_str = record.analyzed_at.strftime("%Y-%m-%d %H:%M:%S") if record.analyzed_at else "N/A"
+    
+    # Header
+    header = (
+        f"[bold]File:[/bold] {record.file_name}\n"
+        f"[bold]Path:[/bold] {record.file_path}\n"
+        f"[bold]Size:[/bold] {format_size(record.file_size) if record.file_size else 'N/A'}\n"
+        f"[bold]Type:[/bold] {record.analysis_type}\n"
+        f"[bold]Analyzed:[/bold] {date_str}"
+    )
+    
+    # Type-specific details
+    details = ""
+    
+    if record.analysis_type == "tabular":
+        details = format_tabular_details(analysis_data.get("tabular", {}))
+    elif record.analysis_type == "document":
+        details = format_document_details(analysis_data.get("document", {}))
+    elif record.analysis_type == "code":
+        details = format_code_details(analysis_data.get("code", {}))
+    elif record.analysis_type == "image":
+        details = format_image_details(analysis_data.get("image", {}))
+    elif record.analysis_type == "archive":
+        details = format_archive_details(analysis_data.get("archive", {}))
+    
+    # AI Description
+    ai_section = ""
+    if record.ai_description:
+        ai_section = f"\n\n[bold]AI Analysis:[/bold]\n[italic]{record.ai_description}[/italic]"
+    
+    # Combine all sections
+    full_content = header
+    if details:
+        full_content += f"\n\n[bold]Details:[/bold]\n{details}"
+    if ai_section:
+        full_content += ai_section
+    
+    console.print(Panel(
+        full_content,
+        title=f"[bold cyan]#{index} — {record.file_name}[/bold cyan]",
+        border_style="dim"
+    ))
+
+
+def format_size(size_bytes: int) -> str:
+    """Format file size to human readable."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def format_tabular_details(tabular: dict) -> str:
+    """Format tabular analysis details."""
+    if not tabular:
+        return "No tabular data available"
+    
+    rows = tabular.get("row_count", "?")
+    cols = tabular.get("column_count", "?")
+    memory = tabular.get("memory_usage", "?")
+    columns = tabular.get("columns", [])
+    dtypes = tabular.get("dtypes", {})
+    missing = tabular.get("missing_percentage", {})
+    
+    # Format rows/cols
+    lines = [
+        f"[green]Rows:[/green] {rows:,}" if isinstance(rows, int) else f"[green]Rows:[/green] {rows}",
+        f"[green]Columns:[/green] {cols}",
+        f"[green]Memory:[/green] {memory}",
+        ""
+    ]
+    
+    # Column details
+    if columns:
+        lines.append("[green]Columns:[/green]")
+        for col in columns[:15]:  # Limit to 15 columns
+            dtype = dtypes.get(col, "unknown")
+            miss_pct = missing.get(col, 0)
+            
+            if miss_pct > 50:
+                miss_color = "red"
+            elif miss_pct > 20:
+                miss_color = "yellow"
+            else:
+                miss_color = "green"
+            
+            lines.append(f"  • {col}: {dtype} [{miss_color}]{miss_pct:.1f}% missing[/{miss_color}]")
+        
+        if len(columns) > 15:
+            lines.append(f"  ... and {len(columns) - 15} more columns")
+    
+    return "\n".join(lines)
+
+
+def format_document_details(document: dict) -> str:
+    """Format document analysis details."""
+    if not document:
+        return "No document data available"
+    
+    lines = []
+    
+    if document.get("page_count"):
+        lines.append(f"[green]Pages:[/green] {document['page_count']}")
+    if document.get("word_count"):
+        lines.append(f"[green]Words:[/green] {document['word_count']:,}")
+    if document.get("char_count"):
+        lines.append(f"[green]Characters:[/green] {document['char_count']:,}")
+    if document.get("language"):
+        lines.append(f"[green]Language:[/green] {document['language']}")
+    
+    if document.get("key_topics"):
+        lines.append(f"\n[green]Key Topics:[/green]")
+        for topic in document["key_topics"][:10]:
+            lines.append(f"  • {topic}")
+    
+    if document.get("summary"):
+        lines.append(f"\n[green]Summary:[/green]\n{document['summary']}")
+    
+    return "\n".join(lines) if lines else "No details available"
+
+
+def format_code_details(code: dict) -> str:
+    """Format code analysis details."""
+    if not code:
+        return "No code data available"
+    
+    lines = []
+    
+    if code.get("language"):
+        lines.append(f"[green]Language:[/green] {code['language']}")
+    if code.get("line_count"):
+        lines.append(f"[green]Lines:[/green] {code['line_count']:,}")
+    if code.get("complexity_estimate"):
+        lines.append(f"[green]Complexity:[/green] {code['complexity_estimate']}")
+    
+    if code.get("import_statements"):
+        lines.append(f"\n[green]Imports:[/green]")
+        for imp in code["import_statements"][:10]:
+            lines.append(f"  • {imp}")
+        if len(code["import_statements"]) > 10:
+            lines.append(f"  ... and {len(code['import_statements']) - 10} more")
+    
+    if code.get("functions"):
+        lines.append(f"\n[green]Functions:[/green]")
+        for func in code["functions"][:10]:
+            lines.append(f"  • {func}")
+        if len(code["functions"]) > 10:
+            lines.append(f"  ... and {len(code['functions']) - 10} more")
+    
+    if code.get("classes"):
+        lines.append(f"\n[green]Classes:[/green]")
+        for cls in code["classes"][:10]:
+            lines.append(f"  • {cls}")
+    
+    return "\n".join(lines) if lines else "No details available"
+
+
+def format_image_details(image: dict) -> str:
+    """Format image analysis details."""
+    if not image:
+        return "No image data available"
+    
+    lines = []
+    
+    if image.get("width") and image.get("height"):
+        lines.append(f"[green]Dimensions:[/green] {image['width']} × {image['height']}")
+    if image.get("format"):
+        lines.append(f"[green]Format:[/green] {image['format']}")
+    if image.get("mode"):
+        lines.append(f"[green]Mode:[/green] {image['mode']}")
+    if image.get("file_size"):
+        lines.append(f"[green]Size:[/green] {image['file_size']}")
+    if image.get("has_exif"):
+        lines.append(f"[green]EXIF Data:[/green] {'Yes' if image['has_exif'] else 'No'}")
+    
+    if image.get("exif_data"):
+        lines.append(f"\n[green]EXIF:[/green]")
+        for key, value in list(image["exif_data"].items())[:10]:
+            lines.append(f"  • {key}: {value}")
+    
+    if image.get("description"):
+        lines.append(f"\n[green]Description:[/green]\n{image['description']}")
+    
+    return "\n".join(lines) if lines else "No details available"
+
+
+def format_archive_details(archive: dict) -> str:
+    """Format archive analysis details."""
+    if not archive:
+        return "No archive data available"
+    
+    lines = []
+    
+    if archive.get("file_count"):
+        lines.append(f"[green]Files:[/green] {archive['file_count']}")
+    if archive.get("total_uncompressed_size"):
+        lines.append(f"[green]Uncompressed Size:[/green] {archive['total_uncompressed_size']}")
+    
+    if archive.get("file_types"):
+        lines.append(f"\n[green]File Types:[/green]")
+        for ext, count in sorted(archive["file_types"].items(), key=lambda x: -x[1])[:10]:
+            lines.append(f"  • {ext}: {count}")
+    
+    if archive.get("file_list"):
+        lines.append(f"\n[green]Contents:[/green]")
+        for f in archive["file_list"][:15]:
+            lines.append(f"  • {f}")
+        if len(archive["file_list"]) > 15:
+            lines.append(f"  ... and {len(archive['file_list']) - 15} more files")
+    
+    return "\n".join(lines) if lines else "No details available"
 
 # ============== HISTORY COMMANDS ==============
 

@@ -7,6 +7,7 @@ import json
 class BaseAIProvider(ABC):
     name: str
     llm = None
+    base_llm = None
 
     @abstractmethod
     def initialize_model(self):

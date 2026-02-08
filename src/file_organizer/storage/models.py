@@ -49,3 +49,27 @@ class OperationHistory(Base):
     
     def __repr__(self):
         return f"<OperationHistory(file='{self.file_name}', status='{self.status}')>"
+    
+
+class FileAnalysis(Base):
+    """Stored analysis results."""
+    __tablename__ = "file_analysis"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # File information
+    file_name = Column(String(255), nullable=False, index=True)
+    file_path = Column(Text, nullable=False)
+    file_size = Column(Integer, nullable=True)
+    file_extension = Column(String(50), nullable=True)
+    
+    # Analysis information
+    analysis_type = Column(String(50), nullable=False)  # tabular, document, code, etc.
+    analysis_json = Column(Text, nullable=False)  # Full analysis as JSON
+    ai_description = Column(Text, nullable=True)
+    
+    # Timestamps
+    analyzed_at = Column(DateTime, server_default=func.now(), index=True)
+    
+    def __repr__(self):
+        return f"<FileAnalysis(file='{self.file_name}', type='{self.analysis_type}')>"

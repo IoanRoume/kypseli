@@ -6,13 +6,14 @@ from langchain_anthropic import ChatAnthropic
 class AnthropicProvider(BaseAIProvider):
     name: str = "anthropic"
     llm = None
+    base_llm = None
     
     def initialize_model(self, model: str = "claude-sonnet-4-20250514"):
-        llm = ChatAnthropic(
+        self.base_llm = ChatAnthropic(
             model=model,
             temperature=0,
             max_tokens=1024
         )
         
-        structured_llm = llm.with_structured_output(LLMClassificationResponse)
+        structured_llm = self.base_llm.with_structured_output(LLMClassificationResponse)
         self.llm = structured_llm
