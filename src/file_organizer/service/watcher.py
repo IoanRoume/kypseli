@@ -131,7 +131,8 @@ def save_service_config(
     provider_name: str,
     model_name: Optional[str],
     configuration_name: Optional[str],
-    cooldown_seconds: int
+    cooldown_seconds: int,
+    base_url: Optional[str] = None
 ):
     """Save service configuration to file."""
     config_file = get_config_file()
@@ -150,7 +151,8 @@ def save_service_config(
         "model_name": model_name,
         "configuration_name": configuration_name,
         "cooldown_seconds": cooldown_seconds,
-        "started_at": datetime.now().isoformat()
+        "started_at": datetime.now().isoformat(),
+        "base_url" : base_url
     }
     
     config_file.write_text(json.dumps(config, indent=2))
@@ -459,7 +461,8 @@ def start_background_service(
     provider_name: str,
     model_name: Optional[str],
     configuration_name: Optional[str],
-    cooldown_seconds: int
+    cooldown_seconds: int,
+    base_url: Optional[str] = None
 ) -> tuple[bool, Optional[int]]:
     """Start the service as a background process. Cross-platform."""
     
@@ -475,7 +478,8 @@ def start_background_service(
         provider_name=provider_name,
         model_name=model_name,
         configuration_name=configuration_name,
-        cooldown_seconds=cooldown_seconds
+        cooldown_seconds=cooldown_seconds,
+        base_url=base_url
     )
     
     # Get path to the runner script

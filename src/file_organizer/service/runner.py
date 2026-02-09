@@ -18,7 +18,7 @@ from file_organizer.service.watcher import (
 from file_organizer.core.models import FoldersToClassify, FolderObject
 
 
-def setup_ai_provider(provider_name: str, model_name: str = None):
+def setup_ai_provider(provider_name: str, model_name: str = None, base_url:str = None):
     """Setup AI provider based on config."""
     if provider_name.lower() == "openai":
         from file_organizer.ai.providers.openai import OpenaiProvider
@@ -40,6 +40,44 @@ def setup_ai_provider(provider_name: str, model_name: str = None):
         provider = GeminiProvider()
         provider.initialize_model(model=model_name or "gemini-2.0-flash")
         return provider
+    elif provider_name == "ollama":
+        if not model_name:
+            return "Model Name is required for Ollama, Make sure model is installed."
+        from file_organizer.ai.providers.ollama import OllamaProvider
+        provider = OllamaProvider()
+        provider.initialize_model(model=model_name)
+        return provider
+    
+    elif provider_name == "groq":
+        from file_organizer.ai.providers.groq import GroqProvider
+        provider = GroqProvider()
+        provider.initialize_model(model=model_name or "llama-3.1-8b-instant")
+        return provider
+    
+    elif provider_name == "mistral":
+        from file_organizer.ai.providers.mistral import MistralProvider
+        provider = MistralProvider()
+        provider.initialize_model(model=model_name or "mistral-small-latest")
+        return provider
+    
+    elif provider_name == "cohere":
+        from file_organizer.ai.providers.cohere import CohereProvider
+        provider = CohereProvider()
+        provider.initialize_model(model=model_name or "command-r")
+        return provider
+    
+    elif provider_name == "openai-compatible" or provider_name == "local":
+        if not model_name or not base_url:
+            return "Model name and base URL are required to run openai-compatible providers."
+        
+        from file_organizer.ai.providers.openai_compatible import OpenAICompatibleProvider
+        provider = OpenAICompatibleProvider()
+        provider.initialize_model(
+            model=model_name,
+            base_url=base_url
+        )
+        return provider
+    
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
 
@@ -72,7 +110,8 @@ def main():
         # Setup AI provider
         ai_provider = setup_ai_provider(
             config["provider_name"],
-            config.get("model_name")
+            config.get("model_name"),
+            config.get("base_url", None)
         )
         
         # Create service

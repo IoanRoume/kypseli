@@ -25,10 +25,6 @@ from file_organizer.extractors.image_extractor import ImageExtractor
 from file_organizer.extractors.video_extractor import VideoExtractor
 from file_organizer.extractors.archive_extractor import ArchiveExtractor
 from file_organizer.extractors.binary_extractor import BinaryExtractor
-from file_organizer.ai.providers.openai import OpenaiProvider
-from file_organizer.ai.providers.deepinfra import DeepInfraProvider
-from file_organizer.ai.providers.gemini import GeminiProvider
-from file_organizer.ai.providers.anthropic import AnthropicProvider
 from file_organizer.storage.database import get_session, init_database
 from file_organizer.storage.repository import ConfigurationRepository, HistoryRepository
 from file_organizer.service.watcher import (
@@ -120,24 +116,74 @@ def setup_extractor_registry() -> ExtractorRegistry:
     return registry
 
 
-def setup_ai_provider(provider_name: str, model: Optional[str] = None):
+def setup_ai_provider(provider_name: str, model: Optional[str] = None, base_url: Optional[str] = None):
     """Create and initialize the AI provider."""
-    if provider_name.lower() == "openai":
+    
+    provider_name = provider_name.lower()
+    
+    if provider_name == "openai":
+        from file_organizer.ai.providers.openai import OpenaiProvider
         provider = OpenaiProvider()
         provider.initialize_model(model=model or "gpt-4o-mini")
         return provider
-    elif provider_name.lower() == "anthropic":
+    
+    elif provider_name == "anthropic":
+        from file_organizer.ai.providers.anthropic import AnthropicProvider
         provider = AnthropicProvider()
         provider.initialize_model(model=model or "claude-sonnet-4-20250514")
         return provider
-    elif provider_name.lower() == "gemini":
+    
+    elif provider_name == "gemini":
+        from file_organizer.ai.providers.gemini import GeminiProvider
         provider = GeminiProvider()
         provider.initialize_model(model=model or "gemini-2.0-flash")
         return provider
-    elif provider_name.lower() == "deepinfra":
+    
+    elif provider_name == "ollama":
+        if not model:
+            return "Model Name is required for Ollama, Make sure model is installed."
+
+        from file_organizer.ai.providers.ollama import OllamaProvider
+        provider = OllamaProvider()
+        provider.initialize_model(model=model)
+        return provider
+    
+    elif provider_name == "groq":
+        from file_organizer.ai.providers.groq import GroqProvider
+        provider = GroqProvider()
+        provider.initialize_model(model=model or "llama-3.1-8b-instant")
+        return provider
+    
+    elif provider_name == "mistral":
+        from file_organizer.ai.providers.mistral import MistralProvider
+        provider = MistralProvider()
+        provider.initialize_model(model=model or "mistral-small-latest")
+        return provider
+    
+    elif provider_name == "cohere":
+        from file_organizer.ai.providers.cohere import CohereProvider
+        provider = CohereProvider()
+        provider.initialize_model(model=model or "command-r")
+        return provider
+    
+    elif provider_name == "openai-compatible" or provider_name == "local":
+        if not model or not base_url:
+            return "Model name and base URL are required to run openai-compatible providers."
+        
+        from file_organizer.ai.providers.openai_compatible import OpenAICompatibleProvider
+        provider = OpenAICompatibleProvider()
+        provider.initialize_model(
+            model=model,
+            base_url=base_url
+        )
+        return provider
+    
+    elif provider_name == "deepinfra":
+        from file_organizer.ai.providers.deepinfra import DeepInfraProvider
         provider = DeepInfraProvider()
         provider.initialize_model(model=model or "google/gemma-3-27b-it")
         return provider
+    
     else:
         console.print(f"[red]Unknown provider: {provider_name}[/red]")
         raise typer.Exit(1)
@@ -264,6 +310,11 @@ def service_start(
         "--save-config",
         help="Save the configuration with this name"
     ),
+    base_url: Optional[str] = typer.Option(
+        None,
+        "--base-url",
+        help="Base Url for ai provider"
+    ),
 ):
     """
     Start the background file watcher service.
@@ -316,7 +367,15 @@ def service_start(
         console.print("[bold]Processing existing files...[/bold]")
         
         # Setup AI provider for processing existing files
-        ai_provider = setup_ai_provider(provider, model)
+        try:
+            ai_provider = setup_ai_provider(provider, model, base_url)
+            if isinstance(ai_provider,str):
+                console.print(f"[dim]{ai_provider}[/dim]")
+                return typer.Exit(1)
+        except Exception as e:
+            console.print(f"[dim]{e}[/dim]")
+            raise typer.Exit(1)
+            
         
         service = FileWatcherService(
             watch_directory=directory,
@@ -341,7 +400,8 @@ def service_start(
         provider_name=provider,
         model_name=model,
         configuration_name=used_config_name,
-        cooldown_seconds=cooldown
+        cooldown_seconds=cooldown,
+        base_url=base_url
     )
     
     if success:
@@ -529,7 +589,8 @@ def service_restart():
         provider_name=config["provider_name"],
         model_name=config.get("model_name"),
         configuration_name=config.get("configuration_name"),
-        cooldown_seconds=config.get("cooldown_seconds", 5)
+        cooldown_seconds=config.get("cooldown_seconds", 5),
+        base_url= config.get("base_url", None)
     )
     
     if success:
@@ -595,6 +656,11 @@ def organize(
         "--analyze", "-a",
         help="Analyze files"
     ),
+    base_url: Optional[str] = typer.Option(
+        None,
+        "--base-url",
+        help="Base Url for ai provider"
+    ),
 ):
     """
     Organize files in a directory using AI classification.
@@ -654,7 +720,14 @@ def organize(
     with console.status("[bold green]Initializing..."):
         scanner = DirectoryScanner()
         registry = setup_extractor_registry()
-        ai_provider = setup_ai_provider(provider, model)
+        try:
+            ai_provider = setup_ai_provider(provider, model, base_url)
+            if isinstance(ai_provider,str):
+                console.print(f"[dim]{ai_provider}[/dim]")
+                return typer.Exit(1)
+        except Exception as e:
+            console.print(f"[dim]{e}[/dim]")
+            raise typer.Exit(1)
         operation_mode = get_operation_mode(mode)
         
         organizer = FileOrganizer(
@@ -716,7 +789,10 @@ def organize(
             # Setup AI provider (optional)
             ai_provider = None
             try:
-                ai_provider = setup_ai_provider(provider, model)
+                ai_provider = setup_ai_provider(provider, model, base_url)
+                if isinstance(ai_provider,str):
+                    console.print(f"[dim]{ai_provider}[/dim]")
+                    return typer.Exit(1)
             except:
                 console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
                 raise typer.Exit(1)
@@ -967,6 +1043,11 @@ def analyze_file(
         "--save/--no-save",
         help="Save analysis to database"
     ),
+    base_url: Optional[str] = typer.Option(
+        None,
+        "--base-url",
+        help="Base Url for ai provider"
+    ),
 ):
     """Analyze a single file and show insights."""
 
@@ -999,7 +1080,10 @@ def analyze_file(
     # Setup AI provider (optional)
     ai_provider = None
     try:
-        ai_provider = setup_ai_provider(provider, model)
+        ai_provider = setup_ai_provider(provider, model, base_url)
+        if isinstance(ai_provider,str):
+            console.print(f"[dim]{ai_provider}[/dim]")
+            return typer.Exit(1)
     except:
         console.print("[red]AI provider not available, skipping AI descriptions[/red]")
         raise typer.Exit(1)
@@ -1154,6 +1238,11 @@ def analyze_directory(
         "--model",
         help="Model to use"
     ),
+    base_url: Optional[str] = typer.Option(
+        None,
+        "--base-url",
+        help="Base Url for ai provider"
+    ),
 ):
     """Analyze all files in a directory."""
     scanner = DirectoryScanner()
@@ -1172,7 +1261,10 @@ def analyze_directory(
         
         ai_provider = None
         try:
-            ai_provider = setup_ai_provider(provider, model)
+            ai_provider = setup_ai_provider(provider, model, base_url)
+            if isinstance(ai_provider,str):
+                console.print(f"[dim]{ai_provider}[/dim]")
+                return typer.Exit(1)
         except:
             console.print("[dim]AI provider not available, skipping AI descriptions[/dim]")
             raise typer.Exit(1)
@@ -1674,44 +1766,94 @@ def providers():
     
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Provider", style="cyan")
-    table.add_column("Status", style="green")
+    table.add_column("Type", style="blue")
+    table.add_column("Status")
     table.add_column("Default Model")
     
     import os
     
-    # OpenAI
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    openai_status = "[green]Configured[/green]" if openai_key else "[red]Not configured[/red]"
-    table.add_row("openai", openai_status, "gpt-4o-mini")
+    # Cloud providers
+    cloud_providers = [
+        ("openai", "OPENAI_API_KEY", "gpt-4o-mini"),
+        ("anthropic", "ANTHROPIC_API_KEY", "claude-sonnet-4-20250514"),
+        ("gemini", "GOOGLE_API_KEY", "gemini-2.0-flash"),
+        ("groq", "GROQ_API_KEY", "llama-3.1-8b-instant"),
+        ("mistral", "MISTRAL_API_KEY", "mistral-small-latest"),
+        ("cohere", "COHERE_API_KEY", "command-r"),
+        ("deepinfra", "DEEPINFRA_API_TOKEN", "gemma-3-27b-it"),
+    ]
     
-    # Anthropic
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    anthropic_status = "[green]Configured[/green]" if anthropic_key else "[red]Not configured[/red]"
-    table.add_row("anthropic", anthropic_status, "claude-sonnet-4-20250514")
+    for name, env_var, default_model in cloud_providers:
+        key = os.environ.get(env_var)
+        
+        # Check if provider package is installed
+        package_available = check_provider_package(name)
+        
+        if not package_available:
+            status = "[yellow]Package not installed[/yellow]"
+        elif key:
+            status = "[green]Configured[/green]"
+        else:
+            status = "[red]API key missing[/red]"
+        
+        table.add_row(name, "Cloud", status, default_model)
     
-    # Gemini
-    gemini_key = os.environ.get("GOOGLE_API_KEY")
-    gemini_status = "[green]Configured[/green]" if gemini_key else "[red]Not configured[/red]"
-    table.add_row("gemini", gemini_status, "gemini-2.0-flash")
+    # Ollama (local)
+    ollama_status = check_ollama_status()
+    table.add_row("ollama", "Local", ollama_status, "varies")
     
-    # DeepInfra
-    deepinfra_key = os.environ.get("DEEPINFRA_API_TOKEN")
-    deepinfra_status = "[green]Configured[/green]" if deepinfra_key else "[red]Not configured[/red]"
-    table.add_row("deepinfra", deepinfra_status, "google/gemma-3-27b-it")
+    # OpenAI-compatible
+    table.add_row("openai-compatible", "Local", "[dim]Custom URL[/dim]", "varies")
     
     console.print(table)
     
-    console.print("\n[dim]Set API keys as environment variables:[/dim]")
-    console.print("  export OPENAI_API_KEY=your-key-here")
-    console.print("  export ANTHROPIC_API_KEY=your-key-here")
-    console.print("  export GOOGLE_API_KEY=your-key-here")
-    console.print("  export DEEPINFRA_API_TOKEN=your-key-here")
+    console.print("\n[dim]Use --provider <name> to select a provider[/dim]")
+
+
+def check_provider_package(provider_name: str) -> bool:
+    """Check if a provider's package is installed."""
+    
+    package_map = {
+        "openai": "langchain_openai",
+        "anthropic": "langchain_anthropic",
+        "gemini": "langchain_google_genai",
+        "groq": "langchain_groq",
+        "mistral": "langchain_mistralai",
+        "cohere": "langchain_cohere",
+        "together": "langchain_together",
+        "deepinfra": "langchain_community",
+        "ollama": "langchain_ollama",
+    }
+    
+    package = package_map.get(provider_name)
+    if not package:
+        return True  # Unknown, assume available
+    
+    try:
+        __import__(package)
+        return True
+    except ImportError:
+        return False
+
+
+def check_ollama_status() -> str:
+    """Check Ollama status safely."""
+    try:
+        import requests
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            return f"[green]Running ({len(models)} models)[/green]"
+    except Exception:
+        pass
+    
+    return "[red]Not running[/red]"
 
 
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]File Organizer[/bold] v0.3.0")
+    console.print("[bold]File Organizer[/bold] v0.5.0")
 
 
 if __name__ == "__main__":
