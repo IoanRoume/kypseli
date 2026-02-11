@@ -52,9 +52,14 @@ jobs:
             --hidden-import PIL --hidden-import pillow_heif \
             --hidden-import pypdf --hidden-import docx \
             --hidden-import pptx --hidden-import ebooklib \
-            --hidden-import bs4 --hidden-import tiktoken
+            --hidden-import bs4 --hidden-import tiktoken \
+            --exclude-module matplotlib \
+            --exclude-module scipy \
+            --exclude-module IPython \
+            --exclude-module jupyter \
+            --exclude-module pytest
 
-      - name: Build with PyInstaller (Windows)
+      - name: Build with PyInstaller (Windows - onedir for speed)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -66,23 +71,51 @@ jobs:
             --hidden-import PIL --hidden-import pillow_heif `
             --hidden-import pypdf --hidden-import docx `
             --hidden-import pptx --hidden-import ebooklib `
-            --hidden-import bs4 --hidden-import tiktoken
+            --hidden-import bs4 --hidden-import tiktoken `
+            --exclude-module matplotlib `
+            --exclude-module scipy `
+            --exclude-module IPython `
+            --exclude-module jupyter `
+            --exclude-module pytest
+
+      - name: Verify build output (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "Contents of dist folder:"
+          Get-ChildItem -Path dist -Recurse | Select-Object FullName
+          
+          if (Test-Path "dist\kypseli\kypseli.exe") {
+            Write-Host "Build successful: kypseli.exe found"
+          } else {
+            Write-Host "ERROR: kypseli.exe not found!"
+            exit 1
+          }
 
       - name: Create Windows Installer (Inno Setup)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path installer_output
+          
+          # Run Inno Setup
           iscc installer.iss
 
-      - name: Prepare Assets for Release
+      - name: Prepare Assets for Release (Linux/macOS)
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           mkdir -p final_assets
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv dist/kypseli-setup.exe final_assets/${{ matrix.asset_name }}
-          else
-            mv dist/kypseli final_assets/${{ matrix.asset_name }}
-          fi
+          chmod +x dist/kypseli
+          mv dist/kypseli final_assets/${{ matrix.asset_name }}
+
+      - name: Prepare Assets for Release (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path final_assets
+          Move-Item installer_output\kypseli-setup.exe final_assets\${{ matrix.asset_name }}
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1

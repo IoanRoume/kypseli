@@ -1,22 +1,26 @@
 [Setup]
 AppName=Kypseli
-AppVersion=0.6.2
+AppVersion=0.6.4
 DefaultDirName={autopf}\Kypseli
 DefaultGroupName=Kypseli
 UninstallDisplayIcon={app}\kypseli.exe
-Compression=lzma
+Compression=lzma2
 SolidCompression=yes
-OutputDir=dist
+OutputDir=installer_output
 OutputBaseFilename=kypseli-setup
 
 [Files]
-Source: "dist\kypseli.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Copy the entire kypseli folder contents
+Source: "dist\kypseli\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Kypseli"; Filename: "{app}\kypseli.exe"
+Name: "{commondesktop}\Kypseli"; Filename: "{app}\kypseli.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Code]
-// This part adds Kypseli to the Windows PATH automatically
 procedure CurStepChanged(CurStep: TSetupStep);
 var
     Path: string;
