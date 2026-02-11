@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kypseli"
+version = "0.6.0"
+description = "AI-powered file organization tool"
+requires-python = ">=3.10"
+dependencies = [
+    "typer[all]",
+    "rich",
+    "sqlalchemy",
+    "watchdog", 
+    "pillow",
+    "pillow-heif",
+    "opencv-python",
+    "pandas",
+    "openpyxl",
+    "tabulate",
+    "pypdf",
+    "python-docx",
+    "python-pptx",
+    "striprtf",
+    "EbookLib",
+    "beautifulsoup4",
+    "openai",
+    "anthropic",
+    "google-generativeai",
+    "langchain",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langchain-google-genai",
+    "langchain-groq",
+    "langchain-mistralai",
+    "langchain-cohere",
+    "langchain-ollama"
+]
+[project.scripts]
+kypseli = "file_organizer.__main__:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
