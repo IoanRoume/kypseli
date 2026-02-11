@@ -59,7 +59,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller src/file_organizer/__main__.py `
-            --onefile --name kypseli --clean --paths src `
+            --onedir --name kypseli --clean --paths src `
             --collect-all file_organizer --collect-all rich `
             --collect-all docx --collect-all pptx --collect-all pypdf `
             --hidden-import pandas --hidden-import cv2 `

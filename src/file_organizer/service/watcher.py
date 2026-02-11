@@ -90,19 +90,22 @@ def is_service_running() -> tuple[bool, Optional[int]]:
     try:
         pid = int(pid_file.read_text().strip())
         
-        # Check if process exists (cross-platform)
         if platform.system() == "Windows":
-            # Windows: use tasklist
-            result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True,
-                text=True
-            )
-            if str(pid) in result.stdout:
+            try:
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if str(pid) in result.stdout and "INFO:" not in result.stdout:
+                    return True, pid
+                else:
+                    pid_file.unlink(missing_ok=True)
+                    return False, None
+            except subprocess.TimeoutExpired:
+                # Assume running if we can't check
                 return True, pid
-            else:
-                pid_file.unlink(missing_ok=True)
-                return False, None
         else:
             # Unix: use kill with signal 0
             os.kill(pid, 0)
@@ -482,11 +485,12 @@ def start_background_service(
         base_url=base_url
     )
     
-    import sys
-    
+    # Determine how to launch the worker
     if getattr(sys, 'frozen', False):
-        cmd = [sys.executable, "service", "worker"]
+        executable = sys.executable
+        cmd = [executable, "service", "worker"]
     else:
+        # Running as Python script
         runner_script = Path(__file__).parent / "runner.py"
         cmd = [sys.executable, str(runner_script)]
     
@@ -497,13 +501,35 @@ def start_background_service(
         CREATE_NO_WINDOW = 0x08000000
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         
+        # Use shell=False and proper flags
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        
         process = subprocess.Popen(
             cmd,
             creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL
+            stdin=subprocess.DEVNULL,
+            startupinfo=startupinfo,
+            close_fds=True
         )
+        
+        # On Windows, write the PID immediately since we know it
+        pid_file = get_pid_file()
+        pid_file.write_text(str(process.pid))
+        
+        # Give it a moment to start
+        time.sleep(2)
+        
+        # Check if process is still running
+        if process.poll() is None:
+            return True, process.pid
+        else:
+            # Process died, clean up
+            pid_file.unlink(missing_ok=True)
+            return False, None
     else:
         # Unix (Linux/macOS): use nohup-style approach
         log_file = get_log_file()
@@ -514,19 +540,20 @@ def start_background_service(
                 stdout=log,
                 stderr=log,
                 stdin=subprocess.DEVNULL,
-                start_new_session=True  # Detach from terminal
+                start_new_session=True
             )
-    
-    for _ in range(10): 
-        time.sleep(0.5)
-        running, pid = is_service_running()
-        if running:
-            return True, pid
+        
+        # Wait for PID file to be created by the worker
+        for _ in range(10): 
+            time.sleep(0.5)
+            running, pid = is_service_running()
+            if running:
+                return True, pid
 
-    if process.poll() is None:  
-        return True, process.pid
+        if process.poll() is None:  
+            return True, process.pid
 
-    return False, None
+        return False, None
 
 
 def stop_service() -> bool:
@@ -535,17 +562,18 @@ def stop_service() -> bool:
     running, pid = is_service_running()
     
     if not running:
+        remove_pid_file()
+        remove_service_config()
         return False
     
     try:
         if platform.system() == "Windows":
-            # Windows: use taskkill
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                capture_output=True
+            result = subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                timeout=10
             )
         else:
-            # Unix: send SIGTERM
             os.kill(pid, signal.SIGTERM)
         
         # Wait for process to stop
@@ -553,23 +581,25 @@ def stop_service() -> bool:
             time.sleep(0.5)
             running, _ = is_service_running()
             if not running:
-                remove_pid_file()
-                remove_service_config()
-                return True
+                break
         
-        # Force kill if still running
-        if platform.system() == "Windows":
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                capture_output=True
-            )
-        else:
-            os.kill(pid, signal.SIGKILL)
+        # Force kill if still running (Unix only, Windows /F already forces)
+        if platform.system() != "Windows":
+            try:
+                os.kill(pid, 0)  # Check if still alive
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         
         remove_pid_file()
         remove_service_config()
         return True
     
+    except subprocess.TimeoutExpired:
+        # Force cleanup
+        remove_pid_file()
+        remove_service_config()
+        return True
     except (ProcessLookupError, PermissionError, OSError):
         remove_pid_file()
         remove_service_config()
