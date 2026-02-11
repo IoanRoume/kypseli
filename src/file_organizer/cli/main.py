@@ -1883,16 +1883,23 @@ def check_ollama_status() -> str:
 
 @app.command()
 def version():
-    """Show version information."""
-    console.print("""
-[bold yellow]      _   _ [/bold yellow]
-[bold yellow]     ( \ / )[/bold yellow]   [bold cyan]KYPSELI[/bold cyan] [dim]v0.6.0[/dim]
-[bold yellow]    __\ V /__[/bold yellow]  [italic]The AI File Hive[/italic]
-[bold yellow]   /   - -   \ [/bold yellow] 
-[bold yellow]  (    =v=    )[/bold yellow]
-[bold yellow]   \_________/ [/bold yellow]
-    """)
-
+    logo = r"""
+              \     /
+          \    o ^ o    /
+            \ (     ) /
+ ____________(%%%%%%%)____________
+(     /   /  )%%%%%%%(  \   \     )
+(___/___/__/           \__\___\___)
+   (     /  /(%%%%%%%)\  \     )
+    (__/___/ (%%%%%%%) \___\__)
+            /(       )\
+          /   (%%%%%)   \
+               (%%%)
+                 !
+    """
+    console.print(f"[bold yellow]{logo}[/bold yellow]")
+    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.6.0[/dim]")
+    console.print("[italic]The AI File Hive[/italic]\n")
 
 if __name__ == "__main__":
     app()
