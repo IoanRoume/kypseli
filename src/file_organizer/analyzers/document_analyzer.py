@@ -72,6 +72,7 @@ class DocumentAnalyzer(BaseAnalyzer):
             )
             
             ai_description = None
+            ai_result = {}
             if ai_provider and word_count > 10:
                 ai_result = self._generate_ai_analysis(
                     file_info, doc_analysis, clean_content[:4000], ai_provider
