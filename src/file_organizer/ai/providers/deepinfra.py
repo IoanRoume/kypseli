@@ -21,6 +21,12 @@ class DeepInfraProvider(BaseAIProvider):
             temperature=0,
             max_tokens=1024
         )
+
+        success, error = self.validate_connection()
+        if not success:
+            raise ConnectionError(f"Deepinfra ({model}): {error}")
+
+
     
     def classify(
         self,

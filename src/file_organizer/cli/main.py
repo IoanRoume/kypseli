@@ -120,73 +120,95 @@ def setup_ai_provider(provider_name: str, model: Optional[str] = None, base_url:
     """Create and initialize the AI provider."""
     
     provider_name = provider_name.lower()
-    
-    if provider_name == "openai":
-        from file_organizer.ai.providers.openai import OpenaiProvider
-        provider = OpenaiProvider()
-        provider.initialize_model(model=model or "gpt-4o-mini")
-        return provider
-    
-    elif provider_name == "anthropic":
-        from file_organizer.ai.providers.anthropic import AnthropicProvider
-        provider = AnthropicProvider()
-        provider.initialize_model(model=model or "claude-sonnet-4-20250514")
-        return provider
-    
-    elif provider_name == "gemini":
-        from file_organizer.ai.providers.gemini import GeminiProvider
-        provider = GeminiProvider()
-        provider.initialize_model(model=model or "gemini-2.0-flash")
-        return provider
-    
-    elif provider_name == "ollama":
-        if not model:
-            return "Model Name is required for Ollama, Make sure model is installed."
-
-        from file_organizer.ai.providers.ollama import OllamaProvider
-        provider = OllamaProvider()
-        provider.initialize_model(model=model)
-        return provider
-    
-    elif provider_name == "groq":
-        from file_organizer.ai.providers.groq import GroqProvider
-        provider = GroqProvider()
-        provider.initialize_model(model=model or "llama-3.1-8b-instant")
-        return provider
-    
-    elif provider_name == "mistral":
-        from file_organizer.ai.providers.mistral import MistralProvider
-        provider = MistralProvider()
-        provider.initialize_model(model=model or "mistral-small-latest")
-        return provider
-    
-    elif provider_name == "cohere":
-        from file_organizer.ai.providers.cohere import CohereProvider
-        provider = CohereProvider()
-        provider.initialize_model(model=model or "command-r")
-        return provider
-    
-    elif provider_name == "openai-compatible" or provider_name == "local":
-        if not model or not base_url:
-            return "Model name and base URL are required to run openai-compatible providers."
+    try:
+        if provider_name == "openai":
+            from file_organizer.ai.providers.openai import OpenaiProvider
+            provider = OpenaiProvider()
+            provider.initialize_model(model=model or "gpt-4o-mini")
+            return provider
         
-        from file_organizer.ai.providers.openai_compatible import OpenAICompatibleProvider
-        provider = OpenAICompatibleProvider()
-        provider.initialize_model(
-            model=model,
-            base_url=base_url
-        )
-        return provider
+        elif provider_name == "anthropic":
+            from file_organizer.ai.providers.anthropic import AnthropicProvider
+            provider = AnthropicProvider()
+            provider.initialize_model(model=model or "claude-sonnet-4-20250514")
+            return provider
+        
+        elif provider_name == "gemini":
+            from file_organizer.ai.providers.gemini import GeminiProvider
+            provider = GeminiProvider()
+            provider.initialize_model(model=model or "gemini-2.0-flash")
+            return provider
+        
+        elif provider_name == "ollama":
+            if not model:
+                return "Model Name is required for Ollama, Make sure model is installed."
+
+            from file_organizer.ai.providers.ollama import OllamaProvider
+            provider = OllamaProvider()
+            provider.initialize_model(model=model)
+            return provider
+        
+        elif provider_name == "groq":
+            from file_organizer.ai.providers.groq import GroqProvider
+            provider = GroqProvider()
+            provider.initialize_model(model=model or "llama-3.1-8b-instant")
+            return provider
+        
+        elif provider_name == "mistral":
+            from file_organizer.ai.providers.mistral import MistralProvider
+            provider = MistralProvider()
+            provider.initialize_model(model=model or "mistral-small-latest")
+            return provider
+        
+        elif provider_name == "cohere":
+            from file_organizer.ai.providers.cohere import CohereProvider
+            provider = CohereProvider()
+            provider.initialize_model(model=model or "command-r")
+            return provider
+        
+        elif provider_name == "openai-compatible" or provider_name == "local":
+            if not model or not base_url:
+                return "Model name and base URL are required to run openai-compatible providers."
+            
+            from file_organizer.ai.providers.openai_compatible import OpenAICompatibleProvider
+            provider = OpenAICompatibleProvider()
+            provider.initialize_model(
+                model=model,
+                base_url=base_url
+            )
+            return provider
+        
+        elif provider_name == "deepinfra":
+            from file_organizer.ai.providers.deepinfra import DeepInfraProvider
+            provider = DeepInfraProvider()
+            provider.initialize_model(model=model or "google/gemma-3-27b-it")
+            return provider
+        
+        else:
+            console.print(f"[red]Unknown provider: {provider_name}[/red]")
+            raise typer.Exit(1)
+        
+    except ConnectionError as e:
+        return f"Connection Error: {e}"
     
-    elif provider_name == "deepinfra":
-        from file_organizer.ai.providers.deepinfra import DeepInfraProvider
-        provider = DeepInfraProvider()
-        provider.initialize_model(model=model or "google/gemma-3-27b-it")
-        return provider
-    
-    else:
-        console.print(f"[red]Unknown provider: {provider_name}[/red]")
-        raise typer.Exit(1)
+    except Exception as e:
+        error_msg = str(e)
+        
+        # Provide helpful hints based on error type
+        if "api_key" in error_msg.lower() or "apikey" in error_msg.lower():
+            env_vars = {
+                "openai": "OPENAI_API_KEY",
+                "anthropic": "ANTHROPIC_API_KEY",
+                "gemini": "GOOGLE_API_KEY",
+                "groq": "GROQ_API_KEY",
+                "mistral": "MISTRAL_API_KEY",
+                "cohere": "COHERE_API_KEY",
+                "deepinfra": "DEEPINFRA_API_TOKEN",
+            }
+            env_var = env_vars.get(provider_name, "API_KEY")
+            return f"Error: API key not configured. Set {env_var} environment variable."
+        
+        return f"Error: {error_msg[:200]}"
 
 
 def create_folders_interactive(base_path: Path) -> FoldersToClassify:
@@ -259,6 +281,15 @@ def create_folders_interactive(base_path: Path) -> FoldersToClassify:
 service_app = typer.Typer(help="Manage the background file watcher service")
 app.add_typer(service_app, name="service")
 
+
+@service_app.command("worker", hidden=True)
+def service_worker():
+    """
+    Internal command: specific entry point for the background process.
+    """
+    from file_organizer.service.runner import run_worker
+    
+    run_worker()
 
 @service_app.command("start")
 def service_start(
@@ -1853,7 +1884,7 @@ def check_ollama_status() -> str:
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]File Organizer[/bold] v0.5.0")
+    console.print("[bold]File Organizer[/bold] v0.6.0")
 
 
 if __name__ == "__main__":

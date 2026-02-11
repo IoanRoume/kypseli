@@ -17,3 +17,7 @@ class AnthropicProvider(BaseAIProvider):
         
         structured_llm = self.base_llm.with_structured_output(LLMClassificationResponse)
         self.llm = structured_llm
+
+        success, error = self.validate_connection()
+        if not success:
+            raise ConnectionError(f"Anthropic ({model}): {error}")

@@ -43,6 +43,10 @@ class OllamaProvider(BaseAIProvider):
         
         self.llm = self.base_llm
         self._model_name = model
+
+        success, error = self.validate_connection()
+        if not success:
+            raise ConnectionError(f"Ollama ({model}): {error}")
     
     def _check_ollama_running(self, base_url: str) -> bool:
         

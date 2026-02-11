@@ -482,12 +482,13 @@ def start_background_service(
         base_url=base_url
     )
     
-    # Get path to the runner script
-    runner_script = Path(__file__).parent / "runner.py"
+    import sys
     
-    # Build command
-    python_exe = sys.executable
-    cmd = [python_exe, str(runner_script)]
+    if getattr(sys, 'frozen', False):
+        cmd = [sys.executable, "service", "worker"]
+    else:
+        runner_script = Path(__file__).parent / "runner.py"
+        cmd = [sys.executable, str(runner_script)]
     
     # Platform-specific process creation
     if platform.system() == "Windows":

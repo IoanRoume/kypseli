@@ -40,6 +40,10 @@ class OpenAICompatibleProvider(BaseAIProvider):
         
         self.llm = self.base_llm
         self._base_url = base_url
+
+        success, error = self.validate_connection()
+        if not success:
+            raise ConnectionError(f"Local ({model}): {error}")
     
     def classify(
         self,

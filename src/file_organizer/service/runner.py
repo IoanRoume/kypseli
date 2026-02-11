@@ -6,8 +6,6 @@ This script is spawned as a separate process by the CLI.
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from file_organizer.service.watcher import (
     load_service_config,
@@ -82,7 +80,7 @@ def setup_ai_provider(provider_name: str, model_name: str = None, base_url:str =
         raise ValueError(f"Unknown provider: {provider_name}")
 
 
-def main():
+def run_worker():
     """Main entry point for the background service."""
     
     logger = setup_logging()
@@ -132,4 +130,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_worker()

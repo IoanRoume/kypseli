@@ -17,3 +17,7 @@ class GroqProvider(BaseAIProvider):
         )
         
         self.llm = self.base_llm.with_structured_output(LLMClassificationResponse)
+
+        success, error = self.validate_connection()
+        if not success:
+            raise ConnectionError(f"Groq ({model}): {error}")

@@ -1,0 +1,44 @@
+# --- Python Junk ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.history/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Build & Distribution ---
+bin/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.spec
+
+# --- Database & App Data ---
+*.db
+*.sqlite3
+.file_organizer/
+organized/
+
+# --- IDEs & OS Junk ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
