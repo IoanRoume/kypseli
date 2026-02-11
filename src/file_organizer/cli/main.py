@@ -49,8 +49,8 @@ from file_organizer.storage.repository import AnalysisRepository
 
 
 app = typer.Typer(
-    name="file-organizer",
-    help="AI-powered file organization tool"
+    name="kypseli",
+    help="AI-powered file organization hive"
 )
 console = Console()
 
@@ -351,16 +351,16 @@ def service_start(
     Start the background file watcher service.
     
     Examples:
-        file-organizer service start ./Downloads --config my_setup
-        file-organizer service start ./Downloads --defaults
-        file-organizer service start ./Downloads --defaults --process-existing
+        kypseli service start ./Downloads --config my_setup
+        kypseli service start ./Downloads --defaults
+        kypseli service start ./Downloads --defaults --process-existing
     """
     
     # Check if already running
     running, pid = is_service_running()
     if running:
         console.print(f"[yellow]Service is already running (PID: {pid})[/yellow]")
-        console.print("Use [bold]file-organizer service stop[/bold] to stop it first.")
+        console.print("Use [bold]kypseli service stop[/bold] to stop it first.")
         raise typer.Exit(1)
     
     output_base = output or Path("./organized")
@@ -441,9 +441,9 @@ def service_start(
             f"[bold]PID:[/bold] {pid}\n"
             f"[bold]Watching:[/bold] {directory}\n"
             f"[bold]Log file:[/bold] {get_log_file()}\n\n"
-            f"[dim]Use 'file-organizer service status' to check status[/dim]\n"
-            f"[dim]Use 'file-organizer service stop' to stop the service[/dim]\n"
-            f"[dim]Use 'file-organizer service logs' to view logs[/dim]",
+            f"[dim]Use 'kypseli service status' to check status[/dim]\n"
+            f"[dim]Use 'kypseli service stop' to stop the service[/dim]\n"
+            f"[dim]Use 'kypseli service logs' to view logs[/dim]",
             title="Service Started"
         ))
     else:
@@ -697,10 +697,10 @@ def organize(
     Organize files in a directory using AI classification.
     
     Examples:
-        file-organizer organize ./Downloads
-        file-organizer organize ./Downloads --defaults
-        file-organizer organize ./Downloads --config my_setup
-        file-organizer organize ./Downloads --save-config work_config
+        kypseli organize ./Downloads
+        kypseli organize ./Downloads --defaults
+        kypseli organize ./Downloads --config my_setup
+        kypseli organize ./Downloads --save-config work_config
     """
     
     output_base = output or Path("./organized")
@@ -716,7 +716,7 @@ def organize(
         folders_config = config_repo.get_folders_config(config_name)
         if not folders_config:
             console.print(f"[red]Configuration '{config_name}' not found.[/red]")
-            console.print("Use [bold]file-organizer config list[/bold] to see available configurations.")
+            console.print("Use [bold]kypseli config list[/bold] to see available configurations.")
             session.close()
             raise typer.Exit(1)
         console.print(f"[green]Using saved configuration: {config_name}[/green]\n")
@@ -738,7 +738,7 @@ def organize(
     analysis_text = "active" if analyze else "inactive"
     
     console.print(Panel(
-        f"[bold blue]File Organizer[/bold blue]\n\n"
+        f"[bold blue]Kypseli[/bold blue]\n\n"
         f"Directory: {directory}\n"
         f"Mode: {mode}\n"
         f"Provider: {provider}\n"
@@ -957,7 +957,7 @@ def config_list():
     
     if not configs:
         console.print("[yellow]No saved configurations found.[/yellow]")
-        console.print("Create one with: [bold]file-organizer organize ./folder --save-config my_config[/bold]")
+        console.print("Create one with: [bold]kypseli organize ./folder --save-config my_config[/bold]")
         return
     
     console.print(f"\n[bold]Saved Configurations ({len(configs)}):[/bold]\n")
@@ -1884,7 +1884,14 @@ def check_ollama_status() -> str:
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]File Organizer[/bold] v0.6.0")
+    console.print("""
+[bold yellow]      _   _ [/bold yellow]
+[bold yellow]     ( \ / )[/bold yellow]   [bold cyan]KYPSELI[/bold cyan] [dim]v0.6.0[/dim]
+[bold yellow]    __\ V /__[/bold yellow]  [italic]The AI File Hive[/italic]
+[bold yellow]   /   - -   \ [/bold yellow] 
+[bold yellow]  (    =v=    )[/bold yellow]
+[bold yellow]   \_________/ [/bold yellow]
+    """)
 
 
 if __name__ == "__main__":

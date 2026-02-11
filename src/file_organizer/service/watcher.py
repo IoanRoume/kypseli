@@ -380,7 +380,7 @@ class FileWatcherService:
             signal.signal(signal.SIGINT, self._signal_handler)
         
         self.logger.info("=" * 60)
-        self.logger.info("FILE ORGANIZER SERVICE STARTED")
+        self.logger.info("KYPSELI SERVICE STARTED")
         self.logger.info("=" * 60)
         self.logger.info(f"PID: {os.getpid()}")
         self.logger.info(f"Platform: {platform.system()}")
@@ -427,7 +427,7 @@ class FileWatcherService:
             self.observer.join()
         
         self.logger.info("=" * 60)
-        self.logger.info("FILE ORGANIZER SERVICE STOPPED")
+        self.logger.info("KYPSELI SERVICE STOPPED")
         self.logger.info("=" * 60)
         
         remove_pid_file()
