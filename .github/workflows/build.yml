@@ -38,62 +38,168 @@ jobs:
           pip install .
           pip install pyinstaller
 
+      # ============== LINUX BUILD ==============
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           pyinstaller src/file_organizer/__main__.py \
             --onedir --name kypseli --clean --paths src \
-            --collect-all file_organizer --collect-all rich \
-            --collect-all docx --collect-all pptx --collect-all pypdf \
-            --hidden-import pandas --hidden-import cv2 \
-            --hidden-import PIL --hidden-import pillow_heif \
-            --hidden-import pypdf --hidden-import docx \
-            --hidden-import pptx --hidden-import ebooklib \
-            --hidden-import bs4 --hidden-import tiktoken \
+            --collect-all file_organizer \
+            --collect-all rich \
+            --collect-all docx \
+            --collect-all pptx \
+            --collect-all pypdf \
+            --collect-all rarfile \
+            --collect-all py7zr \
+            --hidden-import pandas \
+            --hidden-import cv2 \
+            --hidden-import PIL \
+            --hidden-import pillow_heif \
+            --hidden-import pypdf \
+            --hidden-import docx \
+            --hidden-import pptx \
+            --hidden-import ebooklib \
+            --hidden-import bs4 \
+            --hidden-import tiktoken \
+            --hidden-import openpyxl \
+            --hidden-import tabulate \
+            --hidden-import rarfile \
+            --hidden-import py7zr \
+            --hidden-import sqlite3 \
+            --hidden-import zipfile \
+            --hidden-import tarfile \
+            --hidden-import gzip \
+            --hidden-import bz2 \
+            --hidden-import lzma \
+            --hidden-import struct \
+            --hidden-import striprtf \
             --exclude-module matplotlib \
             --exclude-module scipy \
             --exclude-module IPython \
             --exclude-module jupyter \
-            --exclude-module pytest
+            --exclude-module pytest \
+            --exclude-module sphinx \
+            --exclude-module tkinter
 
+      # ============== MACOS BUILD ==============
       - name: Build with PyInstaller (macOS)
         if: matrix.os == 'macos-latest'
         run: |
           pyinstaller src/file_organizer/__main__.py \
             --onedir --name kypseli --clean --paths src \
-            --collect-all file_organizer --collect-all rich \
-            --collect-all docx --collect-all pptx --collect-all pypdf \
-            --hidden-import pandas --hidden-import cv2 \
-            --hidden-import PIL --hidden-import pillow_heif \
-            --hidden-import pypdf --hidden-import docx \
-            --hidden-import pptx --hidden-import ebooklib \
-            --hidden-import bs4 --hidden-import tiktoken \
+            --collect-all file_organizer \
+            --collect-all rich \
+            --collect-all docx \
+            --collect-all pptx \
+            --collect-all pypdf \
+            --collect-all rarfile \
+            --collect-all py7zr \
+            --hidden-import pandas \
+            --hidden-import cv2 \
+            --hidden-import PIL \
+            --hidden-import pillow_heif \
+            --hidden-import pypdf \
+            --hidden-import docx \
+            --hidden-import pptx \
+            --hidden-import ebooklib \
+            --hidden-import bs4 \
+            --hidden-import tiktoken \
+            --hidden-import openpyxl \
+            --hidden-import tabulate \
+            --hidden-import rarfile \
+            --hidden-import py7zr \
+            --hidden-import sqlite3 \
+            --hidden-import zipfile \
+            --hidden-import tarfile \
+            --hidden-import gzip \
+            --hidden-import bz2 \
+            --hidden-import lzma \
+            --hidden-import struct \
+            --hidden-import striprtf \
             --exclude-module matplotlib \
             --exclude-module scipy \
             --exclude-module IPython \
             --exclude-module jupyter \
-            --exclude-module pytest
+            --exclude-module pytest \
+            --exclude-module sphinx \
+            --exclude-module tkinter
 
+      # ============== WINDOWS BUILD ==============
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           pyinstaller src/file_organizer/__main__.py `
             --onedir --name kypseli --clean --paths src `
-            --collect-all file_organizer --collect-all rich `
-            --collect-all docx --collect-all pptx --collect-all pypdf `
-            --hidden-import pandas --hidden-import cv2 `
-            --hidden-import PIL --hidden-import pillow_heif `
-            --hidden-import pypdf --hidden-import docx `
-            --hidden-import pptx --hidden-import ebooklib `
-            --hidden-import bs4 --hidden-import tiktoken `
+            --collect-all file_organizer `
+            --collect-all rich `
+            --collect-all docx `
+            --collect-all pptx `
+            --collect-all pypdf `
+            --collect-all rarfile `
+            --collect-all py7zr `
+            --hidden-import pandas `
+            --hidden-import cv2 `
+            --hidden-import PIL `
+            --hidden-import pillow_heif `
+            --hidden-import pypdf `
+            --hidden-import docx `
+            --hidden-import pptx `
+            --hidden-import ebooklib `
+            --hidden-import bs4 `
+            --hidden-import tiktoken `
+            --hidden-import openpyxl `
+            --hidden-import tabulate `
+            --hidden-import rarfile `
+            --hidden-import py7zr `
+            --hidden-import sqlite3 `
+            --hidden-import zipfile `
+            --hidden-import tarfile `
+            --hidden-import gzip `
+            --hidden-import bz2 `
+            --hidden-import lzma `
+            --hidden-import struct `
+            --hidden-import striprtf `
             --exclude-module matplotlib `
             --exclude-module scipy `
             --exclude-module IPython `
             --exclude-module jupyter `
-            --exclude-module pytest
+            --exclude-module pytest `
+            --exclude-module sphinx `
+            --exclude-module tkinter
 
-      # ============== LINUX PACKAGING ==============
+      # ============== VERIFY BUILD ==============
+      - name: Verify build output (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          echo "Contents of dist folder:"
+          ls -la dist/
+          ls -la dist/kypseli/
+          
+          if [ -f "dist/kypseli/kypseli" ]; then
+            echo "Build successful: kypseli found"
+            # Test it runs
+            ./dist/kypseli/kypseli version || true
+          else
+            echo "ERROR: kypseli not found!"
+            exit 1
+          fi
+
+      - name: Verify build output (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "Contents of dist folder:"
+          Get-ChildItem -Path dist -Recurse | Select-Object FullName
+          
+          if (Test-Path "dist\kypseli\kypseli.exe") {
+            Write-Host "Build successful: kypseli.exe found"
+          } else {
+            Write-Host "ERROR: kypseli.exe not found!"
+            exit 1
+          }
+
+      # ============== PACKAGE ==============
       - name: Package for Linux
         if: matrix.os == 'ubuntu-22.04'
         run: |
@@ -102,7 +208,6 @@ jobs:
           tar -czvf kypseli-linux.tar.gz kypseli/
           mv kypseli-linux.tar.gz ../
 
-      # ============== MACOS PACKAGING ==============
       - name: Package for macOS
         if: matrix.os == 'macos-latest'
         run: |
@@ -111,7 +216,6 @@ jobs:
           tar -czvf kypseli-macos.tar.gz kypseli/
           mv kypseli-macos.tar.gz ../
 
-      # ============== WINDOWS PACKAGING ==============
       - name: Create Windows Installer (Inno Setup)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -119,18 +223,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path installer_output
           iscc installer.iss
 
-      # ============== PREPARE FINAL ASSETS ==============
+      # ============== PREPARE ASSETS ==============
       - name: Prepare Linux Asset
         if: matrix.os == 'ubuntu-22.04'
         run: |
           mkdir -p final_assets
           mv kypseli-linux.tar.gz final_assets/
+          echo "Asset size:"
+          ls -lh final_assets/
 
       - name: Prepare macOS Asset
         if: matrix.os == 'macos-latest'
         run: |
           mkdir -p final_assets
           mv kypseli-macos.tar.gz final_assets/
+          echo "Asset size:"
+          ls -lh final_assets/
 
       - name: Prepare Windows Asset
         if: matrix.os == 'windows-latest'
@@ -138,6 +246,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path final_assets
           Move-Item installer_output\kypseli-setup.exe final_assets\${{ matrix.asset_name }}
+          Write-Host "Asset size:"
+          Get-ChildItem final_assets
 
       # ============== UPLOAD ==============
       - name: Upload Release Assets
