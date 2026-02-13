@@ -167,6 +167,7 @@ kypseli organize <directory> [options]
 | `--analyze` | `-a` | Run detailed analysis on each file |
 | `--yes` | `-y` | Execute without confirmation |
 | `--base-url` | | Base URL for OpenAI-compatible providers |
+| `--expore-depth` | `-e` | Number of directories to explore recursively (0 = only watch directory) |
 
 **Examples:**
 ```bash
@@ -209,12 +210,12 @@ When using `--defaults`, files are organized into:
 
 Scan a directory and display file information without organizing.
 ```bash
-kypseli scan <directory>
+kypseli scan <directory> --expore-depth 0
 ```
 
 **Example:**
 ```bash
-kypseli scan ~/Downloads
+kypseli scan ~/Downloads --expore-depth 0
 ```
 
 Output shows file name, extension, size, type, and modification date with a summary by file type.
@@ -242,9 +243,10 @@ kypseli service start <directory> [options]
 | `--model` | | Model to use |
 | `--output` | `-o` | Base directory for organized folders |
 | `--cooldown` | | Seconds to wait before processing (default: 5) |
-| `--process-existing` | `-e` | Process existing files before watching |
+| `--process-existing` | `-x` | Process existing files before watching |
 | `--save-config` | | Save configuration for reuse |
 | `--base-url` | | Base URL for OpenAI-compatible providers |
+| `--expore-depth` | `-e` | Number of directories to explore recursively (0 = only watch directory) |
 
 **Examples:**
 ```bash
@@ -326,6 +328,7 @@ kypseli analyze file <file_path> [options]
 | `--model` | | Model to use |
 | `--save/--no-save` | | Save analysis to database (default: save) |
 | `--base-url` | | Base URL for OpenAI-compatible providers |
+| `--expore-depth` | `-e` | Number of directories to explore recursively (0 = only watch directory) Only for Directory analysis|
 
 **Example:**
 ```bash
@@ -556,6 +559,7 @@ Kypseli can process and classify a wide variety of file types:
 | Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`, `.svg`, `.ico`, `.heic`, `.heif`, `.tiff` |
 | Videos | `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`, `.flv`, `.wmv`, `.m4v` |
 | Archives | `.zip`, `.tar`, `.gz`, `.rar`, `.7z`, `.bz2`, `.xz` |
+| Binary | `.bin`, `.dat`, `.db`, `.sqlite`, `.sqlite3`, `.exe`, `.dll`, `.so`, `.class` |
 
 ---
 
@@ -600,6 +604,6 @@ ollama list
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+Apache License. See [LICENSE](LICENSE) for details.
 
 ---
