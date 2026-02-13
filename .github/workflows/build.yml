@@ -17,13 +17,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            artifact_name: kypseli
-            asset_name: kypseli-linux
+            asset_name: kypseli-linux.tar.gz
           - os: macos-latest
-            artifact_name: kypseli
-            asset_name: kypseli-macos
+            asset_name: kypseli-macos.tar.gz
           - os: windows-latest
-            artifact_name: kypseli.exe
             asset_name: kypseli-windows-installer.exe
 
     steps:
@@ -41,11 +38,11 @@ jobs:
           pip install .
           pip install pyinstaller
 
-      - name: Build with PyInstaller (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      - name: Build with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           pyinstaller src/file_organizer/__main__.py \
-            --onefile --name kypseli --clean --paths src \
+            --onedir --name kypseli --clean --paths src \
             --collect-all file_organizer --collect-all rich \
             --collect-all docx --collect-all pptx --collect-all pypdf \
             --hidden-import pandas --hidden-import cv2 \
@@ -59,7 +56,25 @@ jobs:
             --exclude-module jupyter \
             --exclude-module pytest
 
-      - name: Build with PyInstaller (Windows - onedir for speed)
+      - name: Build with PyInstaller (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller src/file_organizer/__main__.py \
+            --onedir --name kypseli --clean --paths src \
+            --collect-all file_organizer --collect-all rich \
+            --collect-all docx --collect-all pptx --collect-all pypdf \
+            --hidden-import pandas --hidden-import cv2 \
+            --hidden-import PIL --hidden-import pillow_heif \
+            --hidden-import pypdf --hidden-import docx \
+            --hidden-import pptx --hidden-import ebooklib \
+            --hidden-import bs4 --hidden-import tiktoken \
+            --exclude-module matplotlib \
+            --exclude-module scipy \
+            --exclude-module IPython \
+            --exclude-module jupyter \
+            --exclude-module pytest
+
+      - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -78,45 +93,53 @@ jobs:
             --exclude-module jupyter `
             --exclude-module pytest
 
-      - name: Verify build output (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
+      # ============== LINUX PACKAGING ==============
+      - name: Package for Linux
+        if: matrix.os == 'ubuntu-22.04'
         run: |
-          Write-Host "Contents of dist folder:"
-          Get-ChildItem -Path dist -Recurse | Select-Object FullName
-          
-          if (Test-Path "dist\kypseli\kypseli.exe") {
-            Write-Host "Build successful: kypseli.exe found"
-          } else {
-            Write-Host "ERROR: kypseli.exe not found!"
-            exit 1
-          }
+          cd dist
+          chmod +x kypseli/kypseli
+          tar -czvf kypseli-linux.tar.gz kypseli/
+          mv kypseli-linux.tar.gz ../
 
+      # ============== MACOS PACKAGING ==============
+      - name: Package for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          chmod +x kypseli/kypseli
+          tar -czvf kypseli-macos.tar.gz kypseli/
+          mv kypseli-macos.tar.gz ../
+
+      # ============== WINDOWS PACKAGING ==============
       - name: Create Windows Installer (Inno Setup)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # Create output directory
           New-Item -ItemType Directory -Force -Path installer_output
-          
-          # Run Inno Setup
           iscc installer.iss
 
-      - name: Prepare Assets for Release (Linux/macOS)
-        if: matrix.os != 'windows-latest'
-        shell: bash
+      # ============== PREPARE FINAL ASSETS ==============
+      - name: Prepare Linux Asset
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           mkdir -p final_assets
-          chmod +x dist/kypseli
-          mv dist/kypseli final_assets/${{ matrix.asset_name }}
+          mv kypseli-linux.tar.gz final_assets/
 
-      - name: Prepare Assets for Release (Windows)
+      - name: Prepare macOS Asset
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p final_assets
+          mv kypseli-macos.tar.gz final_assets/
+
+      - name: Prepare Windows Asset
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path final_assets
           Move-Item installer_output\kypseli-setup.exe final_assets\${{ matrix.asset_name }}
 
+      # ============== UPLOAD ==============
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
         with:

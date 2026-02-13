@@ -42,3 +42,5 @@ organized/
 .idea/
 .DS_Store
 Thumbs.db
+
+Makefile

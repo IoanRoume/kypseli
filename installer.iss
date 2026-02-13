@@ -1,6 +1,6 @@
 [Setup]
 AppName=Kypseli
-AppVersion=0.6.4
+AppVersion=0.7.0
 DefaultDirName={autopf}\Kypseli
 DefaultGroupName=Kypseli
 UninstallDisplayIcon={app}\kypseli.exe
