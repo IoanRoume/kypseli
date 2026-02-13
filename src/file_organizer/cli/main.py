@@ -53,7 +53,6 @@ from file_organizer.service.watcher import (
 from datetime import datetime
 import subprocess
 
-from file_organizer.core.scanner import DirectoryScanner
 from file_organizer.analyzers.registry import AnalyzerRegistry
 from file_organizer.storage.repository import AnalysisRepository
 
@@ -363,7 +362,7 @@ def service_start(
     ),
     process_existing: bool = typer.Option(
         False,
-        "--process-existing", "-e",
+        "--process-existing", "-x",
         help="Process existing files before starting watch"
     ),
     save_config: Optional[str] = typer.Option(
@@ -376,6 +375,7 @@ def service_start(
         "--base-url",
         help="Base Url for ai provider"
     ),
+    dir_depth_search: int = typer.Option(1, "--expore-depth", "-e", help="Number of directories to explore recursively (0 = only watch directory)"),
 ):
     """
     Start the background file watcher service.
@@ -443,7 +443,8 @@ def service_start(
             folders_config=folders_config,
             ai_provider=ai_provider,
             cooldown_seconds=cooldown,
-            configuration_name=used_config_name
+            configuration_name=used_config_name,
+            dir_depth_search = dir_depth_search
         )
         
         results = service.process_existing()
@@ -462,7 +463,8 @@ def service_start(
         model_name=model,
         configuration_name=used_config_name,
         cooldown_seconds=cooldown,
-        base_url=base_url
+        base_url=base_url,
+        dir_depth_search=dir_depth_search
     )
     
     if success:
@@ -651,7 +653,8 @@ def service_restart():
         model_name=config.get("model_name"),
         configuration_name=config.get("configuration_name"),
         cooldown_seconds=config.get("cooldown_seconds", 5),
-        base_url= config.get("base_url", None)
+        base_url= config.get("base_url", None),
+        dir_depth_search=config.get("dir_depth_search", 1)
     )
     
     if success:
@@ -722,6 +725,7 @@ def organize(
         "--base-url",
         help="Base Url for ai provider"
     ),
+    dir_depth_search: int = typer.Option(1, "--expore-depth", "-e", help="Number of directories to explore recursively (0 = only watch directory)"),
 ):
     """
     Organize files in a directory using AI classification.
@@ -779,7 +783,7 @@ def organize(
     
     # Initialize components
     with console.status("[bold green]Initializing..."):
-        scanner = DirectoryScanner()
+        scanner = DirectoryScanner(dir_depth_search)
         registry = setup_extractor_registry()
         try:
             ai_provider = setup_ai_provider(provider, model, base_url)
@@ -921,12 +925,13 @@ def scan(
         dir_okay=True,
         resolve_path=True
     ),
+    dir_depth_search: int = typer.Option(1, "--expore-depth", "-e", help="Number of directories to explore recursively (0 = only watch directory)"),
 ):
     """
     Scan a directory and show file information without organizing.
     """
     
-    scanner = DirectoryScanner()
+    scanner = DirectoryScanner(dir_depth_search)
     files = scanner.scan(directory)
     
     if not files:
@@ -1470,9 +1475,10 @@ def analyze_directory(
         "--base-url",
         help="Base Url for ai provider"
     ),
+    dir_depth_search: int = typer.Option(1, "--expore-depth", "-e", help="Number of directories to explore recursively (0 = only watch directory)"),
 ):
     """Analyze all files in a directory."""
-    scanner = DirectoryScanner()
+    scanner = DirectoryScanner(dir_depth_search)
     file_infos = scanner.scan(directory=directory)
     for file_info in file_infos:
 

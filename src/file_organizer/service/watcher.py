@@ -149,7 +149,8 @@ def save_service_config(
     model_name: Optional[str],
     configuration_name: Optional[str],
     cooldown_seconds: int,
-    base_url: Optional[str] = None
+    base_url: Optional[str] = None,
+    dir_depth_search: Optional[int] = 2
 ):
     """Save service configuration to file."""
     config_file = get_config_file()
@@ -169,6 +170,7 @@ def save_service_config(
         "configuration_name": configuration_name,
         "cooldown_seconds": cooldown_seconds,
         "started_at": datetime.now().isoformat(),
+        "dir_depth_search": dir_depth_search,
         "base_url" : base_url
     }
     
@@ -203,7 +205,9 @@ class OrganizeEventHandler(FileSystemEventHandler):
         executor: OperationExecutor,
         scanner: DirectoryScanner,
         logger: logging.Logger,
-        cooldown_seconds: int = 5
+        cooldown_seconds: int = 5,
+        watch_directory: Path = None,
+        max_depth: int = 1
     ):
         super().__init__()
         self.organizer = organizer
@@ -211,12 +215,28 @@ class OrganizeEventHandler(FileSystemEventHandler):
         self.scanner = scanner
         self.logger = logger
         self.cooldown_seconds = cooldown_seconds
+        self.watch_directory = watch_directory
+        self.max_depth = max_depth
         
         self._processed_files: dict[str, datetime] = {}
         self._processing_lock = False
     
+    def _get_depth(self, file_path: Path) -> int:
+        """Calculate how deep a file is relative to watch directory."""
+        try:
+            relative = file_path.relative_to(self.watch_directory)
+            return len(relative.parts) - 1 
+        except ValueError:
+            return 999
+    
     def _should_process(self, file_path: Path) -> bool:
         """Check if file should be processed."""
+        
+        if self.watch_directory and self.max_depth >= 0:
+            depth = self._get_depth(file_path)
+            if depth > self.max_depth:
+                self.logger.debug(f"SKIP (too deep): {file_path.name} at depth {depth}")
+                return False
         
         if file_path.name.startswith('.'):
             return False
@@ -338,17 +358,19 @@ class FileWatcherService:
         folders_config: FoldersToClassify,
         ai_provider: BaseAIProvider,
         cooldown_seconds: int = 5,
-        configuration_name: Optional[str] = None
+        configuration_name: Optional[str] = None,
+        dir_depth_search: int = 2
     ):
         self.watch_directory = watch_directory
         self.folders_config = folders_config
         self.ai_provider = ai_provider
         self.cooldown_seconds = cooldown_seconds
         self.configuration_name = configuration_name
+        self.dir_depth_search = dir_depth_search
         
         self.logger = setup_logging()
         
-        self.scanner = DirectoryScanner()
+        self.scanner = DirectoryScanner(dir_depth_search)
         self.registry = self._setup_registry()
         self.organizer = FileOrganizer(
             scanner=self.scanner,
@@ -395,6 +417,8 @@ class FileWatcherService:
         if platform.system() != "Windows":
             signal.signal(signal.SIGTERM, self._signal_handler)
             signal.signal(signal.SIGINT, self._signal_handler)
+
+        watch_recursive = self.dir_depth_search > 0
         
         self.logger.info("=" * 60)
         self.logger.info("KYPSELI SERVICE STARTED")
@@ -402,6 +426,7 @@ class FileWatcherService:
         self.logger.info(f"PID: {os.getpid()}")
         self.logger.info(f"Platform: {platform.system()}")
         self.logger.info(f"Watching: {self.watch_directory}")
+        self.logger.info(f"Recursive: {watch_recursive} (depth: {self.dir_depth_search})")
         self.logger.info(f"Config: {self.configuration_name or 'default'}")
         self.logger.info(f"Cooldown: {self.cooldown_seconds}s")
         self.logger.info("=" * 60)
@@ -413,14 +438,16 @@ class FileWatcherService:
             executor=self.executor,
             scanner=self.scanner,
             logger=self.logger,
-            cooldown_seconds=self.cooldown_seconds
+            cooldown_seconds=self.cooldown_seconds,
+            watch_directory=self.watch_directory,
+            max_depth=self.dir_depth_search
         )
         
         self.observer = Observer()
         self.observer.schedule(
             self.event_handler,
             str(self.watch_directory),
-            recursive=False
+            recursive=watch_recursive
         )
         self.observer.start()
         
@@ -479,7 +506,8 @@ def start_background_service(
     model_name: Optional[str],
     configuration_name: Optional[str],
     cooldown_seconds: int,
-    base_url: Optional[str] = None
+    base_url: Optional[str] = None,
+    dir_depth_search: Optional[int] = 2
 ) -> tuple[bool, Optional[int]]:
     """Start the service as a background process. Cross-platform."""
     
@@ -496,7 +524,8 @@ def start_background_service(
         model_name=model_name,
         configuration_name=configuration_name,
         cooldown_seconds=cooldown_seconds,
-        base_url=base_url
+        base_url=base_url,
+        dir_depth_search=dir_depth_search
     )
     
     # Determine how to launch the worker

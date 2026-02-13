@@ -18,6 +18,10 @@ from file_organizer.core.models import FileInfo, ContentType
 
 class DirectoryScanner:
 
+    def __init__(self, dir_depth = 2):
+        self.dir_depth = dir_depth
+
+
     EXTENSION_MAP = {
         # --- Tabular (Data & Spreadsheets) ---
         '.csv': ContentType.TABULAR,
@@ -114,38 +118,37 @@ class DirectoryScanner:
     def get_content_type(self, extension: str) -> ContentType:
         return self.EXTENSION_MAP.get(extension.lower(), ContentType.BINARY)
 
-    def scan(self, directory: Path) -> list[FileInfo] | None:
-
+    def scan(self, directory: Path, _depth: int = 0) -> list[FileInfo]:
+        
         if not directory.exists():
-            return None
-
+            return []
+        
         all_file_info = []
-
+        
         for item in directory.iterdir():
-            if item.is_file() and not item.name.startswith('.'):
-                path = item
-                file_name = item.name
-                size = item.stat().st_size
-                extension = item.suffix
-
+            if item.name.startswith('.'):
+                continue
+            
+            if item.is_dir():
+                if _depth < self.dir_depth:
+                    all_file_info.extend(self.scan(item, _depth + 1))
+                continue
+            
+            if item.is_file():
                 stat_info = item.stat()
-
-                creation_time = datetime.datetime.fromtimestamp(stat_info.st_ctime)
-                modified_time = datetime.datetime.fromtimestamp(stat_info.st_mtime)
-                content_type = self.get_content_type(extension=extension)
-
+                
                 file_info = FileInfo(
-                    path=path,
-                    name=file_name,
-                    size=size,
-                    extension=extension,
-                    date_created=creation_time,
-                    date_modified=modified_time,
-                    content_type=content_type
+                    path=item,
+                    name=item.name,
+                    size=stat_info.st_size,
+                    extension=item.suffix,
+                    date_created=datetime.datetime.fromtimestamp(stat_info.st_ctime),
+                    date_modified=datetime.datetime.fromtimestamp(stat_info.st_mtime),
+                    content_type=self.get_content_type(extension=item.suffix)
                 )
-
+                
                 all_file_info.append(file_info)
-
+        
         return all_file_info
 
                 

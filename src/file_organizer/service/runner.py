@@ -144,7 +144,8 @@ def run_worker():
             folders_config=folders_config,
             ai_provider=ai_provider,
             cooldown_seconds=config.get("cooldown_seconds", 5),
-            configuration_name=config.get("configuration_name")
+            configuration_name=config.get("configuration_name"),
+            dir_depth_search=config.get("dir_depth_search")
         )
         
         # Run the service (blocking)
