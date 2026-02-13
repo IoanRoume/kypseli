@@ -55,9 +55,6 @@ import subprocess
 
 from file_organizer.core.scanner import DirectoryScanner
 from file_organizer.analyzers.registry import AnalyzerRegistry
-from file_organizer.analyzers.tabular_analyzer import TabularAnalyzer
-from file_organizer.analyzers.text_analyzer import TextAnalyzer
-from file_organizer.analyzers.document_analyzer import DocumentAnalyzer
 from file_organizer.storage.repository import AnalysisRepository
 
 
@@ -129,6 +126,24 @@ def setup_extractor_registry() -> ExtractorRegistry:
     registry.register(ArchiveExtractor())
     registry.register(BinaryExtractor())
     return registry
+
+def register_analyzers(file_info: FileInfo) -> AnalyzerRegistry:
+
+    from file_organizer.analyzers.tabular_analyzer import TabularAnalyzer
+    from file_organizer.analyzers.text_analyzer import TextAnalyzer
+    from file_organizer.analyzers.document_analyzer import DocumentAnalyzer
+    from file_organizer.analyzers.archive_analyzer import ArchiveAnalyzer
+    from file_organizer.analyzers.binary_analyzer import BinaryAnalyzer
+
+    
+    registry = AnalyzerRegistry()
+    registry.register(TabularAnalyzer())
+    registry.register(TextAnalyzer())
+    registry.register(DocumentAnalyzer())
+    registry.register(ArchiveAnalyzer())
+    registry.register(BinaryAnalyzer())
+    return registry.get_analyzer(file_info)
+
 
 
 def setup_ai_provider(provider_name: str, model: Optional[str] = None, base_url: Optional[str] = None):
@@ -821,12 +836,8 @@ def organize(
     if analyze:
         file_infos = scanner.scan(directory=directory)
         for file_info in file_infos:
-            registry = AnalyzerRegistry()
-            registry.register(TabularAnalyzer())
-            registry.register(TextAnalyzer())
-            registry.register(DocumentAnalyzer())
 
-            analyzer = registry.get_analyzer(file_info)
+            analyzer = register_analyzers(file_info)
     
             if not analyzer:
                 console.print(f"[yellow]Skipping {file_info.path.name}: No analyzer available for {file_info.content_type.value} files[/yellow]")
@@ -862,6 +873,10 @@ def organize(
                 display_document_analysis(result)
             elif result.code:
                 display_text_analysis(result)
+            elif result.archive:
+                display_archive_analysis(result)
+            elif result.binary:
+                display_binary_analysis(result)
             
             session = get_session()
             repo = AnalysisRepository(session)
@@ -1112,12 +1127,8 @@ def analyze_file(
         content_type=scanner.get_content_type(file_path.suffix)
     )
     
-    registry = AnalyzerRegistry()
-    registry.register(TabularAnalyzer())
-    registry.register(TextAnalyzer())
-    registry.register(DocumentAnalyzer())
     
-    analyzer = registry.get_analyzer(file_info)
+    analyzer = register_analyzers(file_info)
     
     if not analyzer:
         console.print(f"[yellow]No analyzer available for {file_info.content_type.value} files[/yellow]")
@@ -1153,6 +1164,10 @@ def analyze_file(
         display_document_analysis(result)
     elif result.code:
         display_text_analysis(result)
+    elif result.archive:
+        display_archive_analysis(result)
+    elif result.binary:
+        display_binary_analysis(result)
     
     # Save to database
     if save:
@@ -1176,6 +1191,172 @@ def display_text_analysis(result: AnalysisResult):
         subtitle="Text Overview"
     ))
 
+    if result.ai_description:
+        console.print(Panel(
+            result.ai_description,
+            title="[bold]AI Analysis[/bold]",
+            border_style="blue"
+        ))
+
+def display_binary_analysis(result: AnalysisResult):
+    """Display binary analysis results."""
+    
+    analysis = result.binary
+    
+    if analysis.is_database:
+        category = "Database"
+        category_style = "blue"
+    elif analysis.is_executable:
+        category = "Executable"
+        category_style = "red"
+    elif analysis.is_library:
+        category = "Library"
+        category_style = "yellow"
+    else:
+        category = "Binary Data"
+        category_style = "dim"
+    
+    overview_lines = [
+        f"[bold]Type:[/bold] {analysis.binary_type}",
+        f"[bold]Format:[/bold] {analysis.format_details or 'Unknown'}",
+        f"[bold]Category:[/bold] [{category_style}]{category}[/{category_style}]",
+    ]
+    
+    if analysis.architecture:
+        overview_lines.append(f"[bold]Architecture:[/bold] {analysis.architecture}")
+    
+    if analysis.bit_depth:
+        overview_lines.append(f"[bold]Bit Depth:[/bold] {analysis.bit_depth}-bit")
+    
+    if analysis.endianness:
+        overview_lines.append(f"[bold]Endianness:[/bold] {analysis.endianness}")
+    
+    if analysis.entry_point:
+        overview_lines.append(f"[bold]Entry Point:[/bold] {analysis.entry_point}")
+    
+    if analysis.file_version:
+        overview_lines.append(f"[bold]Version:[/bold] {analysis.file_version}")
+    
+    if analysis.entropy is not None:
+        entropy_color = "red" if analysis.is_packed else "green"
+        packed_note = " (possibly packed)" if analysis.is_packed else ""
+        overview_lines.append(f"[bold]Entropy:[/bold] [{entropy_color}]{analysis.entropy}/8.0{packed_note}[/{entropy_color}]")
+    
+    console.print(Panel(
+        "\n".join(overview_lines),
+        title=f"[bold cyan]{result.file_info.name}[/bold cyan]",
+        subtitle="Binary Overview"
+    ))
+    
+    if analysis.is_database and analysis.db_tables:
+        console.print("\n[bold]Database Tables:[/bold]\n")
+        
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Table", style="cyan")
+        table.add_column("Rows", justify="right", style="green")
+        
+        for tbl_name in analysis.db_tables[:20]:
+            count = analysis.db_row_counts.get(tbl_name, -1)
+            count_str = f"{count:,}" if count >= 0 else "Error"
+            table.add_row(tbl_name, count_str)
+        
+        if len(analysis.db_tables) > 20:
+            table.add_row("...", f"+{len(analysis.db_tables) - 20} more")
+        
+        console.print(table)
+        
+        if analysis.db_size_info:
+            info = analysis.db_size_info
+            console.print(f"\n[dim]Pages: {info.get('pages', 'N/A')} | "
+                         f"Page Size: {info.get('page_size', 'N/A')} bytes | "
+                         f"DB Size: {info.get('total_size', 'N/A')}[/dim]")
+    
+    if analysis.sections and not analysis.is_database:
+        console.print("\n[bold]Sections/Segments:[/bold]\n")
+        
+        for section in analysis.sections[:15]:
+            console.print(f"  [dim]•[/dim] {section}")
+        
+        if len(analysis.sections) > 15:
+            console.print(f"  [dim]... and {len(analysis.sections) - 15} more[/dim]")
+    
+    if analysis.strings_preview:
+        console.print("\n[bold]Extracted Strings (sample):[/bold]\n")
+        
+        for s in analysis.strings_preview[:15]:
+            display_str = s[:70] + "..." if len(s) > 70 else s
+            console.print(f"  [dim]•[/dim] {display_str}")
+        
+        if len(analysis.strings_preview) > 15:
+            console.print(f"  [dim]... and {len(analysis.strings_preview) - 15} more[/dim]")
+    
+    if analysis.magic_bytes:
+        console.print(f"\n[dim]Magic Bytes: {analysis.magic_bytes[:32]}...[/dim]")
+    
+    if result.ai_description:
+        console.print(Panel(
+            result.ai_description,
+            title="[bold]AI Analysis[/bold]",
+            border_style="blue"
+        ))
+
+def display_archive_analysis(result: AnalysisResult):
+    """Display archive analysis results."""
+    
+    analysis = result.archive
+    
+    compression_str = f"{analysis.compression_ratio}% saved" if analysis.compression_ratio else "N/A"
+    password_str = "Yes" if analysis.has_password else "No"
+    
+    console.print(Panel(
+        f"[bold]Archive Type:[/bold] {analysis.archive_type or 'Unknown'}\n"
+        f"[bold]Files:[/bold] {analysis.file_count:,}\n"
+        f"[bold]Directories:[/bold] {analysis.directory_count:,}\n"
+        f"[bold]Uncompressed Size:[/bold] {analysis.total_uncompressed_size}\n"
+        f"[bold]Compression:[/bold] {compression_str}\n"
+        f"[bold]Password Protected:[/bold] {password_str}",
+        title=f"[bold cyan]{result.file_info.name}[/bold cyan]",
+        subtitle="Archive Overview"
+    ))
+    
+    # File types table
+    if analysis.file_types:
+        console.print("\n[bold]File Types:[/bold]\n")
+        
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Extension", style="cyan")
+        table.add_column("Count", justify="right", style="green")
+        
+        for ext, count in sorted(analysis.file_types.items(), key=lambda x: -x[1])[:15]:
+            table.add_row(ext, str(count))
+        
+        if len(analysis.file_types) > 15:
+            table.add_row("...", f"+{len(analysis.file_types) - 15} more")
+        
+        console.print(table)
+    
+    if analysis.top_level_items:
+        console.print("\n[bold]Top-Level Contents:[/bold]\n")
+        
+        for item in analysis.top_level_items[:20]:
+            console.print(f"  [dim]•[/dim] {item}")
+        
+        if len(analysis.top_level_items) > 20:
+            console.print(f"  [dim]... and {len(analysis.top_level_items) - 20} more[/dim]")
+    
+    if analysis.largest_file:
+        console.print(f"\n[bold]Largest File:[/bold] {analysis.largest_file.get('name', 'Unknown')} ({analysis.largest_file.get('size', 'Unknown')})")
+    
+    if analysis.oldest_file or analysis.newest_file:
+        console.print(f"\n[bold]File Dates:[/bold]")
+        if analysis.oldest_file:
+            console.print(f"  Oldest: {analysis.oldest_file}")
+        if analysis.newest_file:
+            console.print(f"  Newest: {analysis.newest_file}")
+    
+    if hasattr(analysis, 'note') and analysis.note:
+        console.print(f"\n[yellow]Note: {analysis.note}[/yellow]")
+    
     if result.ai_description:
         console.print(Panel(
             result.ai_description,
@@ -1294,12 +1475,8 @@ def analyze_directory(
     scanner = DirectoryScanner()
     file_infos = scanner.scan(directory=directory)
     for file_info in file_infos:
-        registry = AnalyzerRegistry()
-        registry.register(TabularAnalyzer())
-        registry.register(TextAnalyzer())
-        registry.register(DocumentAnalyzer())
 
-        analyzer = registry.get_analyzer(file_info)
+        analyzer = register_analyzers(file_info)
 
         if not analyzer:
             console.print(f"[yellow]Skipping {file_info.path.name}: No analyzer available for {file_info.content_type.value} files[/yellow]")
@@ -1334,6 +1511,10 @@ def analyze_directory(
             display_document_analysis(result)
         elif result.code:
             display_text_analysis(result)
+        elif result.archive:
+            display_archive_analysis(result)
+        elif result.binary:
+            display_binary_analysis(result)
         
         session = get_session()
         repo = AnalysisRepository(session)
@@ -1913,7 +2094,7 @@ def version():
                  !
     """
     console.print(f"[bold yellow]{logo}[/bold yellow]")
-    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.0[/dim]")
+    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.2[/dim]")
     console.print("[italic]The AI File Hive[/italic]\n")
 
 if __name__ == "__main__":

@@ -1,3 +1,17 @@
+# Copyright 2026 Ioannis Roumeliotis
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 from pydantic import BaseModel, BeforeValidator, ValidationError, Field
 from datetime import datetime
 from pathlib import Path
@@ -118,13 +132,50 @@ class ImageAnalysis(BaseModel):
     exif_data: Optional[dict]
     description: Optional[str]  
 
-
-class ArchiveAnalysis(BaseModel):
+class ArchiveAnalysis(BaseModel):    
     file_count: int
     total_uncompressed_size: str
-    file_list: list[str]
-    file_types: dict[str, int] 
+    file_list: list[str] = []
+    file_types: dict[str, int] = {}
+    compression_ratio: Optional[float] = None 
+    has_password: Optional[bool] = False
+    archive_type: Optional[str] = None
+    top_level_items: list[str] = [] 
+    directory_count: int = 0
+    largest_file: Optional[dict] = None 
+    oldest_file: Optional[str] = None
+    newest_file: Optional[str] = None
+    note: Optional[str] = None
 
+class BinaryAnalysis(BaseModel):    
+    binary_type: str
+    format_details: Optional[str] = None  # More specific format info
+    architecture: Optional[str] = None  # x86, x64, ARM, ARM64, etc.
+    bit_depth: Optional[int] = None  # 32 or 64
+    is_executable: bool = False
+    is_library: bool = False
+    is_database: bool = False
+    endianness: Optional[str] = None  # Little Endian, Big Endian
+    entry_point: Optional[str] = None  # Hex address
+    sections: list[str] = []  # Section names or indexes
+    imports: list[str] = []  # Imported functions/libraries
+    exports: list[str] = []  # Exported functions
+    strings_preview: list[str] = []  
+    
+    db_tables: list[str] = []
+    db_row_counts: dict[str, int] = {}
+    db_size_info: Optional[dict] = None
+    
+    # Metadata
+    file_version: Optional[str] = None
+    product_name: Optional[str] = None
+    company_name: Optional[str] = None
+    created_date: Optional[str] = None
+    
+    # Security/analysis
+    entropy: Optional[float] = None  # 0-8 scale
+    is_packed: Optional[bool] = None  
+    magic_bytes: Optional[str] = None  
 
 class AnalysisResult(BaseModel):
     file_info: FileInfo
@@ -136,6 +187,7 @@ class AnalysisResult(BaseModel):
     code: Optional[CodeAnalysis] = None
     image: Optional[ImageAnalysis] = None
     archive: Optional[ArchiveAnalysis] = None
+    binary: Optional[BinaryAnalysis] = None
     
     error: Optional[str] = None
     ai_description: Optional[str] = None 

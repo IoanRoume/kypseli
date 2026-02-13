@@ -103,6 +103,7 @@ class DirectoryScanner:
         '.dat': ContentType.BINARY,
         '.db': ContentType.BINARY,
         '.sqlite': ContentType.BINARY,
+        '.sqlite3': ContentType.BINARY,
         '.exe': ContentType.BINARY,
         '.dll': ContentType.BINARY,
         '.so': ContentType.BINARY,

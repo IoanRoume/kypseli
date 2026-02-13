@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 from file_organizer.core.models import FileInfo, TabularAnalysis, DocumentAnalysis
+from typing import Optional
 
 ANALYSIS_SYSTEM_PROMPT = """You are a data analyst assistant. Your task is to provide clear, concise descriptions and insights about files and datasets.
 
@@ -148,4 +149,132 @@ KEY POINTS: A comma-separated list of the main themes or findings.
 LANGUAGE: The Language that the document is written.
 
 Keep the total response under 150 words."""
+    return prompt
+
+
+
+def build_archive_analysis_prompt(
+    file_info,
+    file_count: int,
+    total_size: str,
+    file_types: dict,
+    top_level_items: list,
+    compression_ratio: Optional[float],
+    archive_type: str,
+    largest_file: Optional[dict],
+) -> str:
+    """Build prompt for archive analysis."""
+    
+    types_str = ", ".join([f"{ext}: {count}" for ext, count in list(file_types.items())[:10]])
+    
+    top_items_str = ", ".join(top_level_items[:15])
+    if len(top_level_items) > 15:
+        top_items_str += f"... and {len(top_level_items) - 15} more"
+    
+    largest_str = "N/A"
+    if largest_file:
+        largest_str = f"{largest_file.get('name', 'Unknown')} ({largest_file.get('size', 'Unknown')})"
+    
+    compression_str = f"{compression_ratio}% space saved" if compression_ratio else "Unknown"
+    
+    prompt = f"""Analyze this archive file and provide a brief description.
+
+ARCHIVE INFORMATION:
+- File name: {file_info.name}
+- Archive type: {archive_type}
+- File size (compressed): {file_info.size} bytes
+- Total files: {file_count}
+- Total uncompressed size: {total_size}
+- Compression ratio: {compression_str}
+- Largest file: {largest_str}
+
+FILE TYPES IN ARCHIVE:
+{types_str}
+
+TOP-LEVEL CONTENTS:
+{top_items_str}
+
+Provide a brief analysis (under 150 words) covering:
+1. What this archive likely contains (project, backup, dataset, etc.)
+2. The primary content type (code, documents, media, mixed, etc.)
+3. Any notable observations about the structure or contents
+4. Potential use case or origin of this archive"""
+
+    return prompt
+
+
+
+def build_binary_analysis_prompt(
+    file_info,
+    binary_type: str,
+    format_details: Optional[str],
+    architecture: Optional[str],
+    bit_depth: Optional[int],
+    is_executable: bool,
+    is_library: bool,
+    is_database: bool,
+    sections: list,
+    strings_preview: list,
+    db_tables: list,
+    db_row_counts: dict,
+    entropy: Optional[float],
+    is_packed: Optional[bool],
+) -> str:
+    """Build prompt for binary file analysis."""
+    
+    # Format sections
+    sections_str = ", ".join(sections[:15]) if sections else "None detected"
+    
+    # Format strings
+    strings_str = "\n".join([f"  - {s[:80]}" for s in strings_preview[:20]]) if strings_preview else "None extracted"
+    
+    # Format database info
+    db_info = ""
+    if is_database and db_tables:
+        db_info = f"\nDATABASE TABLES ({len(db_tables)}):\n"
+        for table in db_tables[:15]:
+            count = db_row_counts.get(table, 'unknown')
+            db_info += f"  - {table}: {count:,} rows\n" if isinstance(count, int) and count >= 0 else f"  - {table}\n"
+    
+    # Determine file category
+    if is_database:
+        category = "Database"
+    elif is_executable:
+        category = "Executable"
+    elif is_library:
+        category = "Library/Shared Object"
+    else:
+        category = "Binary Data"
+    
+    # Packed indicator
+    packed_str = ""
+    if entropy is not None:
+        packed_str = f"\nEntropy: {entropy}/8.0"
+        if is_packed:
+            packed_str += " (possibly packed/encrypted)"
+    
+    prompt = f"""Analyze this binary file and provide a brief description.
+
+BINARY FILE INFORMATION:
+- File name: {file_info.name}
+- File size: {file_info.size:,} bytes
+- Category: {category}
+- Type: {binary_type}
+- Format: {format_details or 'Unknown'}
+- Architecture: {architecture or 'Unknown'}
+- Bit depth: {bit_depth or 'Unknown'}-bit
+{packed_str}
+
+SECTIONS/SEGMENTS:
+{sections_str}
+{db_info}
+EXTRACTED STRINGS (sample):
+{strings_str}
+
+Provide a brief analysis (under 150 words) covering:
+1. What this binary file likely is (application, system file, database, etc.)
+2. Its probable purpose or origin
+3. Any notable characteristics based on the strings or structure
+4. Platform compatibility and requirements"""
+
     return prompt
