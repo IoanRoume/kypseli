@@ -39,18 +39,11 @@ jobs:
           pip install pyinstaller
 
       # ============== LINUX BUILD ==============
-      - name: Install UPX (Linux)
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx
-
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           pyinstaller src/file_organizer/__main__.py \
             --onedir --name kypseli --clean --paths src \
-            --upx-dir /usr/bin \
             --collect-all file_organizer \
             --collect-all rich \
             --collect-all docx \
@@ -95,15 +88,12 @@ jobs:
             --exclude-module cv2.dnn \
             --exclude-module debugpy \
             --exclude-module setuptools \
-            --exclude-module pkg_resources \
-            --strip
+            --exclude-module pkg_resources
 
-      - name: Strip binaries (Linux)
+      - name: Check Linux build size
         if: matrix.os == 'ubuntu-22.04'
         run: |
-          find dist/kypseli -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
-          find dist/kypseli -name "*.so" -exec strip --strip-unneeded {} \; 2>/dev/null || true
-          echo "Size after stripping:"
+          echo "Build size:"
           du -sh dist/kypseli/
 
       # ============== MACOS BUILD ==============
@@ -156,16 +146,12 @@ jobs:
             --exclude-module cv2.dnn \
             --exclude-module debugpy \
             --exclude-module setuptools \
-            --exclude-module pkg_resources \
-            --strip
+            --exclude-module pkg_resources
 
-      - name: Strip binaries (macOS)
+      - name: Check macOS build size
         if: matrix.os == 'macos-latest'
         run: |
-          find dist/kypseli -type f -perm +111 -exec strip -x {} \; 2>/dev/null || true
-          find dist/kypseli -name "*.so" -exec strip -x {} \; 2>/dev/null || true
-          find dist/kypseli -name "*.dylib" -exec strip -x {} \; 2>/dev/null || true
-          echo "Size after stripping:"
+          echo "Build size:"
           du -sh dist/kypseli/
 
       # ============== WINDOWS BUILD ==============
@@ -266,12 +252,12 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           echo "Contents of dist folder:"
-          ls -la dist/
           ls -la dist/kypseli/
           
           if [ -f "dist/kypseli/kypseli" ]; then
             echo "Build successful: kypseli found"
-            ./dist/kypseli/kypseli version || true
+            echo "Testing version command:"
+            ./dist/kypseli/kypseli version
           else
             echo "ERROR: kypseli not found!"
             exit 1
@@ -282,10 +268,12 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Contents of dist folder:"
-          Get-ChildItem -Path dist -Recurse | Select-Object FullName
+          Get-ChildItem -Path dist\kypseli | Select-Object Name, Length
           
           if (Test-Path "dist\kypseli\kypseli.exe") {
             Write-Host "Build successful: kypseli.exe found"
+            Write-Host "Testing version command:"
+            & dist\kypseli\kypseli.exe version
           } else {
             Write-Host "ERROR: kypseli.exe not found!"
             exit 1

@@ -20,7 +20,7 @@ REPO="IoanRoume/kypseli"
 BINARY_NAME="kypseli"
 INSTALL_DIR="/usr/local/kypseli"
 BIN_LINK="/usr/local/bin/kypseli"
-VERSION="0.7.5"
+VERSION="0.7.6"
 # ---------------------
 
 YELLOW='\033[1;33m'
