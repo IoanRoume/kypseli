@@ -52,11 +52,12 @@ from file_organizer.service.watcher import (
 )
 from datetime import datetime
 import subprocess
-
+import warnings
 from file_organizer.analyzers.registry import AnalyzerRegistry
 from file_organizer.storage.repository import AnalysisRepository
 
-
+warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic.main")
 
 
 app = typer.Typer(
@@ -2100,7 +2101,7 @@ def version():
                  !
     """
     console.print(f"[bold yellow]{logo}[/bold yellow]")
-    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.6[/dim]")
+    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.7[/dim]")
     console.print("[italic]The AI File Hive[/italic]\n")
 
 if __name__ == "__main__":

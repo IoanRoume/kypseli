@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=Kypseli
-AppVersion=0.7.6
+AppVersion=0.7.7
 AppPublisher=Ioannis Roumeliotis
 AppPublisherURL=https://github.com/IoanRoume/kypseli
 AppSupportURL=https://github.com/IoanRoume/kypseli/issues
