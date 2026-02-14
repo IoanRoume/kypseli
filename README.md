@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Kypseli Logo" width="200"/>
+  <img src="assets/logo.png" alt="Kypseli Logo" width="500"/>
 </p>
 
 <h1 align="center">Kypseli</h1>
@@ -98,6 +98,25 @@ echo 'eval "$(_KYPSELI_COMPLETE=zsh_source kypseli)"' >> ~/.zshrc
 ```powershell
 kypseli version
 ```
+## Uninstallation
+
+### Linux/macOS
+
+Basic uninstall (keeps your data):
+```bash
+curl -fsSL https://raw.githubusercontent.com/IoanRoume/kypseli/main/uninstall.sh | sh
+```
+
+Full uninstall (removes everything):
+```bash
+curl -fsSL https://raw.githubusercontent.com/IoanRoume/kypseli/main/uninstall.sh | sh -s -- --purge
+```
+
+### Windows
+
+1. Open **Settings** → **Apps** → **Installed apps**
+2. Find **Kypseli** and click **Uninstall**
+3. (Optional) Remove user data: `rmdir /s %USERPROFILE%\.file_organizer`
 
 ### From Source (Python)
 
