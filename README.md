@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Kypseli Logo" width="200"/>
+  <img src="assets/logo.png" alt="Kypseli Logo" width="500"/>
 </p>
 
 <h1 align="center">Kypseli</h1>

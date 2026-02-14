@@ -2100,7 +2100,7 @@ def version():
                  !
     """
     console.print(f"[bold yellow]{logo}[/bold yellow]")
-    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.4[/dim]")
+    console.print("[bold cyan]KYPSELI[/bold cyan] [dim]v0.7.5[/dim]")
     console.print("[italic]The AI File Hive[/italic]\n")
 
 if __name__ == "__main__":

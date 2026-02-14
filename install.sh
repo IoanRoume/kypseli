@@ -20,7 +20,7 @@ REPO="IoanRoume/kypseli"
 BINARY_NAME="kypseli"
 INSTALL_DIR="/usr/local/kypseli"
 BIN_LINK="/usr/local/bin/kypseli"
-VERSION="0.7.4"
+VERSION="0.7.5"
 # ---------------------
 
 YELLOW='\033[1;33m'
@@ -177,57 +177,3 @@ fi
 printf "\n"
 printf "  ${DIM}Documentation: https://github.com/${REPO}${NC}\n"
 printf "\n"
-```
-
----
-
-## What It Looks Like
-```
-  ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡
-  ⬡                           ⬡
-  ⬡   🐝 KYPSELI INSTALLER   ⬡
-  ⬡      v0.7.4             ⬡
-  ⬡                           ⬡
-  ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡ ⬡
-
-  Installing for linux...
-
-  [✓] Found curl
-  [✓] Found tar
-  [✓] Found sudo
-
-  [↓] Downloading from GitHub...
-
-  ######################################################################## 100.0%
-  [✓] Download complete
-
-  [✓] Extracted archive
-  [✓] Installed to /usr/local/kypseli
-  [✓] Added shell completion to /home/ir/.bashrc
-
-              \     /
-          \    o ^ o    /
-            \ (     ) /
- ____________(%%%%%%%)____________
-(     /   /  )%%%%%%%(  \   \     )
-(___/___/__/           \__\___\___)
-   (     /  /(%%%%%%%)\  \     )
-    (__/___/ (%%%%%%%) \___\__)
-            /(       )\
-          /   (%%%%%)   \
-               (%%%)
-                 !
-
-  ════════════════════════════════════════
-  ║  KYPSELI installed successfully!     ║
-  ════════════════════════════════════════
-
-  Version:   0.7.4
-  Location:  /usr/local/kypseli
-  Binary:    /usr/local/bin/kypseli
-
-  Next steps:
-    1. Run: source /home/ir/.bashrc
-    2. Then: kypseli --help
-
-  Documentation: https://github.com/IoanRoume/kypseli
